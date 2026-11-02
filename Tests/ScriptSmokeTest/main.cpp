@@ -11,6 +11,7 @@
 #include <Rbfx.Script.Core/ScriptSystem.h>
 
 #include <Urho3D/Core/Context.h>
+#include <Urho3D/Core/ObjectCategory.h>
 #include <Urho3D/Engine/Engine.h>
 #include <Urho3D/Engine/EngineDefs.h>
 #include <Urho3D/IO/FileSystem.h>
@@ -158,6 +159,12 @@ int main(int argc, char** argv)
             const TypeInfo* base = reflection->GetTypeInfo()->GetBaseTypeInfo();
             if (!base || base->GetType() != LogicComponent::GetTypeStatic())
                 result = Fail("the base of the reflected type Rotator is not LogicComponent");
+            // The editor menus list the types of the "Component/" categories that have a factory.
+            const auto& categories = context->GetObjectCategories();
+            const auto user = categories.find(Category_User.c_str());
+            if (!reflection->HasObjectFactory() || reflection->GetCategory() != Category_User || user == categories.end()
+                || ea::find(user->second.begin(), user->second.end(), StringHash("Rotator")) == user->second.end())
+                result = Fail("the reflected type Rotator is not in the category Component/User");
             if (!context->CreateObject(StringHash("Rotator")))
                 result = Fail("Context::CreateObject(Rotator) returned null");
             Node* node = scene->CreateChild("ReflectedRotator");

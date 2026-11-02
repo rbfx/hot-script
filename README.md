@@ -81,6 +81,7 @@ class Rotator : Urho3D.LogicComponent { ... }
 - After each script load, the `ScriptSystem` registers each new class with this attribute.
 - The engine factory makes the class by its name: `Context::CreateObject` and `Node::CreateComponent`.
 - The engine attributes of the native base are copied to the script type.
+- A component type gets the category `Component/User`. The editor lists it in the "User" group of its component menus.
 - The primary native base must be an engine type, for example `LogicComponent`.
 - Here, "attribute" is a Hot++ tag. An "engine attribute" is a reflected rbfx property.
 

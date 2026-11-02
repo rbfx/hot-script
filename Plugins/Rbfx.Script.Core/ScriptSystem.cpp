@@ -6,8 +6,10 @@
 #include "Rbfx.Script.Core/ScriptSourceFileSystem.h"
 
 #include <Urho3D/Core/CoreEvents.h>
+#include <Urho3D/Core/ObjectCategory.h>
 #include <Urho3D/Core/ObjectReflection.h>
 #include <Urho3D/IO/Log.h>
+#include <Urho3D/Scene/Component.h>
 
 #include <EASTL/algorithm.h>
 #include <EASTL/sort.h>
@@ -279,6 +281,10 @@ void ScriptSystem::RegisterReflectedTypes()
             = context_->ReflectCustomType(ea::make_unique<TypeInfo>(name.c_str(), baseReflection->GetTypeInfo()));
         reflection->SetObjectFactory(&CreateReflectedObject);
         reflection->CopyAttributesFrom(baseReflection);
+        // The editor lists a component type in its menus only when the type has a category under
+        // "Component/". SetReflectionCategory also updates the category lists of the context.
+        if (baseReflection->GetTypeInfo()->IsTypeOf<Component>())
+            context_->SetReflectionCategory(reflection->GetTypeInfo(), Category_User);
         reflectedTypes_.insert(type);
         URHO3D_LOGINFO("ScriptSystem: registered '{}' with the engine (base '{}')", name, baseName);
     }
