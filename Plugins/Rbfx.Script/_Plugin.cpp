@@ -21,7 +21,8 @@ namespace
 const char* const ScriptResourceDir = "Scripts";
 
 /// The game plugin. It registers the ScriptSystem subsystem with the ResourceCache source,
-/// and it loads all scripts of the "Scripts" resource folder.
+/// and it loads all scripts of the "Scripts" resource folder. When the context has a
+/// ScriptSystem already (for example the one of the editor plugin), the plugin uses it.
 class RbfxScriptPlugin : public Plugin
 {
 public:
@@ -30,17 +31,25 @@ public:
 protected:
     void Load() override
     {
-        auto source = std::make_shared<ResourceScriptSource>(context_, ScriptResourceDir);
-        auto system = MakeShared<ScriptSystem>(context_, std::move(source));
-        context_->RegisterSubsystem(system);
-        system->LoadAllScripts();
+        ScriptSystem* system = ScriptSystem::GetOrCreateShared(
+            context_, [this] { return std::make_shared<ResourceScriptSource>(context_, ScriptResourceDir); },
+            ownsSystem_);
+        if (ownsSystem_)
+            system->LoadAllScripts();
     }
 
     void Unload() override
     {
         // The users of the subsystem must release the script objects before this point.
-        context_->RemoveSubsystem<ScriptSystem>();
+        // A subsystem of another plugin stays.
+        if (ownsSystem_)
+            context_->RemoveSubsystem<ScriptSystem>();
+        ownsSystem_ = false;
     }
+
+private:
+    /// True when this plugin made the subsystem.
+    bool ownsSystem_{};
 };
 
 } // namespace

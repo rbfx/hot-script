@@ -3,6 +3,8 @@
 
 #pragma once
 
+#include "Rbfx.Script.Core/ScriptCoreApi.h"
+
 #include <Urho3D/Urho3D.h>
 
 #include <EASTL/string.h>
@@ -16,7 +18,7 @@ namespace Urho3D
 /// A name is a relative path with "/" between the parts, for example "Scripts/Rotator.hot".
 /// The Hot++ backend can call ReadText, Exists and GetModificationStamp from more than one
 /// thread at the same time, so an implementation must be thread safe.
-class IScriptSource
+class RBFX_SCRIPT_CORE_API IScriptSource
 {
 public:
     virtual ~IScriptSource() = default;
@@ -35,6 +37,6 @@ public:
 };
 
 /// Return true when the name has the suffix ".hot" or ".cpp".
-bool IsScriptFileName(const ea::string& name);
+RBFX_SCRIPT_CORE_API bool IsScriptFileName(const ea::string& name);
 
 } // namespace Urho3D

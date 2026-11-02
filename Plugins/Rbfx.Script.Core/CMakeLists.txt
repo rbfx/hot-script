@@ -1,8 +1,15 @@
 # Rbfx.Script.Core: the shared script logic. It has no plugin entry point.
 # The game plugin and the editor plugin link it and give it a script source.
+# With a shared engine the core is a shared library. Then the process has one copy of the core
+# and of the Hot++ runtime state, also when both plugins load into one process.
 
 file(GLOB RBFX_SCRIPT_CORE_SOURCES ${CMAKE_CURRENT_SOURCE_DIR}/*.h ${CMAKE_CURRENT_SOURCE_DIR}/*.cpp)
-add_library(Rbfx.Script.Core STATIC ${RBFX_SCRIPT_CORE_SOURCES})
+if(BUILD_SHARED_LIBS)
+    add_library(Rbfx.Script.Core SHARED ${RBFX_SCRIPT_CORE_SOURCES})
+    target_compile_definitions(Rbfx.Script.Core PUBLIC RBFX_SCRIPT_CORE_SHARED PRIVATE RBFX_SCRIPT_CORE_EXPORTS)
+else()
+    add_library(Rbfx.Script.Core STATIC ${RBFX_SCRIPT_CORE_SOURCES})
+endif()
 target_link_libraries(Rbfx.Script.Core PUBLIC Urho3D hot::backend)
 target_include_directories(Rbfx.Script.Core PUBLIC
     $<BUILD_INTERFACE:${CMAKE_CURRENT_SOURCE_DIR}/..>

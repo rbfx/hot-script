@@ -17,7 +17,7 @@ namespace Urho3D
 /// The script system gives each script the name "<VirtualRoot>/<name>" for the backend.
 /// So a "using" line of a script searches this file system first, in the folder of the script.
 /// A path outside the virtual root is not in this file system: the backend then reads the disk.
-class ScriptSourceFileSystem final : public hot::FileSystem
+class RBFX_SCRIPT_CORE_API ScriptSourceFileSystem final : public hot::FileSystem
 {
 public:
     /// The prefix of the script paths. No real folder has this name.

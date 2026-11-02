@@ -8,6 +8,8 @@
 #include <Urho3D/Core/CoreEvents.h>
 #include <Urho3D/IO/Log.h>
 
+#include <EASTL/sort.h>
+
 #include <hot/backend.h>
 #include <hot/runtime/loader.h>
 #include <hot/runtime/threads.h>
@@ -146,9 +148,13 @@ bool ScriptSystem::CompileAndApply(const ea::string& name)
     // Read the stamp before the text. A change between the two reads then starts one more reload.
     const unsigned long long stamp = source_->GetModificationStamp(name);
     ea::string text;
+    ScriptStatus& status = scripts_[name];
+    status.name_ = name;
+    status.stamp_ = stamp;
     if (!source_->ReadText(name, text))
     {
         ReportError(Format("cannot read the script '{}' from {}", name, source_->GetDescription()));
+        status.error_ = lastError_;
         return false;
     }
 
@@ -168,6 +174,7 @@ bool ScriptSystem::CompileAndApply(const ea::string& name)
         if (!built)
         {
             ReportError(Format("cannot compile '{}': {}", name, ToEaString(built.error)));
+            status.error_ = lastError_;
             return false;
         }
         result = loader_->load(std::move(*built.module));
@@ -185,10 +192,20 @@ bool ScriptSystem::CompileAndApply(const ea::string& name)
             ReportError(Format("'{}' needs a full reload; release its objects and restart: {}", name, FormatResult(result)));
         else
             ReportError(Format("cannot load '{}': {}", name, FormatResult(result)));
+        status.error_ = lastError_;
         return false;
     }
 
-    loaded_[name] = stamp;
+    // The classes of this unit have the new generation in their dispatch tables.
+    status.loaded_ = true;
+    status.error_.clear();
+    status.generation_ = hot::active_generation;
+    status.classes_.clear();
+    for (const hot::ClassInfo& info : loader_->stats().classes)
+    {
+        if (info.generation == hot::active_generation)
+            status.classes_.push_back(ToEaString(info.name));
+    }
     lastError_.clear();
     URHO3D_LOGINFO("ScriptSystem: loaded '{}' (generation {})", name, hot::active_generation);
     return true;
@@ -245,22 +262,37 @@ void* ScriptSystem::CreateNative(const ea::string& className)
 
 void ScriptSystem::PollScripts()
 {
+    if (!source_)
+        return;
+    // A script with a compile error is polled too: a fixed file then loads.
     ea::vector<ea::string> changed;
-    for (const auto& [name, stamp] : loaded_)
+    for (const auto& [name, status] : scripts_)
     {
         const unsigned long long current = source_->GetModificationStamp(name);
-        if (current != 0 && current != stamp)
+        if (current != 0 && current != status.stamp_)
             changed.push_back(name);
     }
     for (const ea::string& name : changed)
     {
         URHO3D_LOGINFO("ScriptSystem: '{}' changed, reloading", name);
-        if (!CompileAndApply(name))
-        {
-            // Keep the old code, and do not compile the same text again at each poll.
-            loaded_[name] = source_->GetModificationStamp(name);
-        }
+        // On an error the old code stays. The stamp of the failed text prevents a compile at each poll.
+        CompileAndApply(name);
     }
+}
+
+ea::vector<ScriptStatus> ScriptSystem::GetScriptStatus() const
+{
+    ea::vector<ScriptStatus> result;
+    for (const auto& [name, status] : scripts_)
+        result.push_back(status);
+    ea::sort(result.begin(), result.end(),
+        [](const ScriptStatus& lhs, const ScriptStatus& rhs) { return lhs.name_ < rhs.name_; });
+    return result;
+}
+
+unsigned ScriptSystem::GetActiveGeneration() const
+{
+    return hot::active_generation;
 }
 
 void ScriptSystem::Update()
