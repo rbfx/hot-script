@@ -49,3 +49,11 @@ static const char kRbfxPreludeText[] = R\"rbfxprelude(@RBFX_SCRIPT_PRELUDE_TEXT@
 "
     @ONLY)
 target_include_directories(Rbfx.Script.Core PRIVATE ${CMAKE_CURRENT_BINARY_DIR}/generated)
+
+# The script host for the language server hot-ls. CMake writes .cache/hot/hosts/Rbfx.Script.json
+# with the engine include folders and definitions of the core target and the prelude. So hot-ls
+# knows the engine types and the attribute ReflectedObject in the scripts and in the prelude file.
+hot_script_host(NAME Rbfx.Script TARGET Rbfx.Script.Core
+    SCRIPT_DIRS ${CMAKE_CURRENT_SOURCE_DIR}/../../Project/Data/Scripts
+    SCRIPTS ${_rbfx_script_prelude}
+    PRELUDES ${_rbfx_script_prelude})

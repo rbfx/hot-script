@@ -22,6 +22,26 @@ Script support for rbfx. It uses Hot++ for hot reload.
 The default engine path is `../rbfx/CMake`.
 Set `-DCMAKE_PREFIX_PATH=<path>` to use a different engine.
 
+## IDE (hot-ls)
+
+The Hot++ language server `hot-ls` gives diagnostics, completion and F12 for the scripts.
+The configure step writes the script host file `.cache/hot/hosts/Rbfx.Script.json` (`hot_script_host` in `Plugins/Rbfx.Script.Core/CMakeLists.txt`).
+The file has these parts:
+
+- The engine include folders, definitions and options of the target `Rbfx.Script.Core`. Thus `hot-ls` finds `Urho3D.Object` and the other engine types.
+- The scripts in `Project/Data/Scripts` and the prelude file.
+- The prelude `Rbfx.prelude.hot`. `hot-ls` gives it to each script, as the `ScriptSystem` does at run time. Thus it knows `ReflectedObject` and the engine handle rules.
+
+Run the configure step one time before you open the scripts. `hot-ls` finds the file in the workspace folder.
+Open the repository root as the workspace folder.
+
+Use the `hot-ls` of the same build. An older `hot-ls` does not know the newer attributes, for example `cpp_overrides`.
+The VS Code extension of Hot++ (`hotpp/editors/vscode`) finds `hot-ls` in `PATH`. Else, set its path in the workspace settings:
+
+    "hot.server.path": "${workspaceFolder}/cmake-build/dll/bin/hot-ls"
+
+Change `cmake-build/dll` to your build folder.
+
 ## Architecture
 
 `Rbfx.Script.Core` has no plugin entry point. It has these parts:
