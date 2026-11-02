@@ -121,6 +121,9 @@ public:
     /// The destructor calls it. Thus a new subsystem, for example of a reloaded plugin, can register the types again.
     /// The engine must not hold objects of these types.
     virtual void UnregisterReflectedTypes();
+    /// Return the static TypeInfo of the shell of a script class, or null if the shell does not
+    /// report the class name as its type.
+    const TypeInfo* ShellTypeInfo(const ea::string& className);
 
     /// Return the ScriptSystem of the context. Make and register one with the source when the
     /// context has none. "created" is true when this call made the subsystem: the caller then

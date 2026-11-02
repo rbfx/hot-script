@@ -255,8 +255,6 @@ void ScriptSystem::RegisterReflectedTypes()
     // TODO: Unregister removed classes. The engine can still hold objects of them.
     // TODO: Register the engine attributes of new fields on reload.
     // TODO: Register the fields or properties with an [Attribute] tag as engine attributes.
-    // TODO: Override GetType, GetTypeName and GetTypeInfo in the shell. The objects then report
-    // the script type, and a scene save keeps the script type.
     for (const hot::ClassInfo& info : loader_->stats().classes)
     {
         if (info.removed
@@ -279,8 +277,20 @@ void ScriptSystem::RegisterReflectedTypes()
             URHO3D_LOGWARNING("ScriptSystem: cannot register '{}': the base '{}' is not an engine type", name, baseName);
             continue;
         }
-        ObjectReflection* reflection
-            = context_->ReflectCustomType(ea::make_unique<TypeInfo>(name.c_str(), baseReflection->GetTypeInfo()));
+        // The prelude puts URHO3D_OBJECT in each shell. The engine registers the static TypeInfo of
+        // the shell, so the type of an object and the registered type are the same TypeInfo. The
+        // TypeInfo is in the core module of the class, and the core module stays loaded until the
+        // loader is destroyed. The destructor unregisters the types before.
+        const TypeInfo* typeInfo = ShellTypeInfo(name);
+        ObjectReflection* reflection = nullptr;
+        if (typeInfo)
+            reflection = context_->Reflect(typeInfo);
+        else
+        {
+            URHO3D_LOGWARNING("ScriptSystem: '{}' does not report its own type: a scene saves the base type", name);
+            reflection
+                = context_->ReflectCustomType(ea::make_unique<TypeInfo>(name.c_str(), baseReflection->GetTypeInfo()));
+        }
         reflection->SetObjectFactory(&CreateReflectedObject);
         reflection->CopyAttributesFrom(baseReflection);
         // The editor lists a component type in its menus only when the type has a category under
@@ -290,6 +300,20 @@ void ScriptSystem::RegisterReflectedTypes()
         reflectedTypes_.insert(type);
         URHO3D_LOGINFO("ScriptSystem: registered '{}' with the engine (base '{}')", name, baseName);
     }
+}
+
+const TypeInfo* ScriptSystem::ShellTypeInfo(const ea::string& className)
+{
+    // A shell has no static accessor that the host can call, so a temporary object gives the
+    // TypeInfo. The script constructor runs one time for this object.
+    const hot::ClassEntry* entry = loader_ ? loader_->find(className.c_str()) : nullptr;
+    if (!entry || !entry->create)
+        return nullptr;
+    SharedPtr<Object> object(static_cast<Object*>(entry->create().native));
+    if (!object)
+        return nullptr;
+    const TypeInfo* typeInfo = object->GetTypeInfo();
+    return typeInfo && typeInfo->GetTypeName() == className ? typeInfo : nullptr;
 }
 
 void ScriptSystem::UnregisterReflectedTypes()

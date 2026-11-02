@@ -103,10 +103,24 @@ The two forms give the same result.
   So a plugin unload removes the types, and a new plugin instance registers them again.
 - Here, "attribute" is a Hot++ tag. An "engine attribute" is a reflected rbfx property.
 
+Script type identity:
+
+- The prelude puts `URHO3D_OBJECT(ScriptClass, Base)` in the shell of each script class below `Urho3D::Object`.
+  This applies to all such classes, also to classes without `ReflectedObject`.
+- So `GetType`, `GetTypeName`, `GetTypeInfo` and `IsInstanceOf` give the script type.
+  A script cannot override these four functions.
+- The engine registers the static `TypeInfo` of the shell. An object and its registered type have the same `TypeInfo`.
+  A hot reload keeps it. A new plugin instance registers a new one.
+  Exception: after a reload that changes the constructors of a class, new objects have a second `TypeInfo`.
+  It has the same name and type hash, so a scene save and the engine factory still work.
+- A scene save writes the script type, and a scene load makes the script class again.
+- `Node::GetComponent<LogicComponent>()` does not find a script component, because it compares the exact type.
+  Use `GetDerivedComponent<LogicComponent>()` or the script type name.
+- A scene that was saved before this change has the base type (for example `LogicComponent`) for its script components.
+  Such a component loads as an `UnknownComponent`. Remove it and add the script component again.
+
 Limits (TODO comments in `ScriptSystem::RegisterReflectedTypes`):
 
-- `GetType`, `GetTypeName` and `GetTypeInfo` give the native base, not the script type.
-  So a scene save writes the base type, and a scene load makes an `UnknownComponent`.
 - A removed class does not unregister the type.
 - Script fields are not engine attributes yet.
 

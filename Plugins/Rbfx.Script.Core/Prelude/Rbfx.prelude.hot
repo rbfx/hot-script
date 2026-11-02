@@ -15,3 +15,10 @@
 // The primary native base must be an engine type, for example a class that derives from Object.
 // A .cpp script writes RBFX_SCRIPT_REFLECTED after "class" (Rbfx.Script.Core/ScriptReflection.h).
 [attribute] class ReflectedObject;
+
+// Each script class below Urho3D::Object reports its own type: the shell gets URHO3D_OBJECT with
+// the script class name and the C++ base. The engine registers the static TypeInfo of the shell,
+// so a scene saves and loads the script type. The macro overrides the four virtuals below, so the
+// shell has no script slot for them, and a script cannot override them.
+[cpp_prelude("URHO3D_OBJECT($N, $B);"), cpp_overrides("GetType GetTypeName GetTypeInfo IsInstanceOf")]
+class : Urho3D.Object;

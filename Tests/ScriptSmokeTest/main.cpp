@@ -61,6 +61,33 @@ bool WriteFile(const std::string& path, const std::string& text)
     return static_cast<bool>(out);
 }
 
+// Save a scene with a component of the type and load it into a new scene. The result is the type name
+// of the loaded component, or an empty string.
+ea::string SceneRoundTrip(Context* context, const char* className)
+{
+    auto scene = MakeShared<Scene>(context);
+    scene->CreateChild("Saved")->CreateComponent(StringHash(className));
+    VectorBuffer saved;
+    if (!scene->SaveXML(saved))
+        return {};
+    auto loadedScene = MakeShared<Scene>(context);
+    MemoryBuffer savedData(saved.GetBuffer());
+    if (!loadedScene->LoadXML(savedData))
+        return {};
+    Node* node = loadedScene->GetChild("Saved");
+    Component* loaded = node && !node->GetComponents().empty() ? node->GetComponents()[0].Get() : nullptr;
+    std::printf("SmokeTest: the loaded scene has the component '%s'\n", loaded ? loaded->GetTypeName().c_str() : "(none)");
+    return loaded ? loaded->GetTypeName() : ea::string{};
+}
+
+// A script object reports its script type, and the engine registers the same TypeInfo.
+bool ReportsRegisteredType(Context* context, Object* object, const char* className)
+{
+    ObjectReflection* reflection = context->GetReflection(StringHash(className));
+    return object && reflection && object->GetTypeName() == className && object->GetType() == StringHash(className)
+        && object->GetTypeInfo() == reflection->GetTypeInfo() && object->IsInstanceOf<LogicComponent>();
+}
+
 float YawOf(Node* node)
 {
     return node->GetRotation().YawAngle();
@@ -213,6 +240,8 @@ int main(int argc, char** argv)
                 result = Fail("Node::CreateComponent did not make a script component");
                 continue;
             }
+            if (!ReportsRegisteredType(context, component, className))
+                result = Fail("a script component does not report its registered type");
             component->Update(0.5f);
             std::printf("SmokeTest: reflected %s yaw after 0.5 s = %.1f\n", className, YawOf(node));
             if (YawOf(node) < 40.0f || YawOf(node) > 50.0f)
@@ -220,10 +249,18 @@ int main(int argc, char** argv)
         }
         if (context->GetReflection(StringHash("Counter")))
             result = Fail("Counter is registered with the engine, but it has no attribute");
+        for (const char* className : {"Rotator", "Rotator2"})
+        {
+            if (SceneRoundTrip(context, className) != className)
+                result = Fail("a scene does not keep the type of a script component");
+        }
 
-        // Hot reload: change the speed of Rotator2 and reload. The live component keeps its node.
+        // Hot reload: change the speed of Rotator2 and reload. The live component keeps its node and
+        // its type. The component reports the type Rotator2, so GetComponent<LogicComponent> does not find it.
         Node* node2 = scene->GetChild("Rotator2");
-        auto* rotator2 = node2 ? node2->GetComponent<LogicComponent>() : nullptr;
+        auto* rotator2 = node2 ? node2->GetDerivedComponent<LogicComponent>() : nullptr;
+        if (!rotator2)
+            result = Fail("the Rotator2 node has no script component");
         const std::string path2 = dataDir + "/Scripts/Rotator2.cpp";
         std::string original;
         if (rotator2 && ReadFile(path2, original))
@@ -241,6 +278,10 @@ int main(int argc, char** argv)
             std::printf("SmokeTest: Rotator2 yaw after reload = %.1f\n", YawOf(node2));
             if (YawOf(node2) < -5.0f || YawOf(node2) > 5.0f)
                 result = Fail("the reload did not change the code");
+            if (!ReportsRegisteredType(context, rotator2, "Rotator2"))
+                result = Fail("a script component does not report its registered type after a reload");
+            if (SceneRoundTrip(context, "Rotator2") != "Rotator2")
+                result = Fail("a scene does not keep the type of a script component after a reload");
         }
 
         scene.Reset();
@@ -268,31 +309,18 @@ int main(int argc, char** argv)
                 result = Fail("the second plugin instance does not register a script type");
         }
 
-        // Save a scene with a Rotator component and load it into a new scene.
-        auto scene = MakeShared<Scene>(context);
-        scene->CreateChild("Saved")->CreateComponent(StringHash("Rotator"));
-        VectorBuffer saved;
-        if (!scene->SaveXML(saved))
-            result = Fail("Scene::SaveXML failed");
-        auto loadedScene = MakeShared<Scene>(context);
-        MemoryBuffer savedData(saved.GetBuffer());
-        if (!loadedScene->LoadXML(savedData))
-            result = Fail("Scene::LoadXML failed");
-        Node* loadedNode = loadedScene->GetChild("Saved");
-        Component* loaded = loadedNode && !loadedNode->GetComponents().empty() ? loadedNode->GetComponents()[0].Get() : nullptr;
-        std::printf("SmokeTest: the loaded scene has the component '%s'\n", loaded ? loaded->GetTypeName().c_str() : "(none)");
-        // Known gap: the shell of a script object reports the type of its native base. So the scene saves
-        // "LogicComponent", and the load makes an UnknownComponent. The check fails when the gap is closed.
-        // Then make this check strict.
-        if (!loaded)
-            result = Fail("the saved component does not load");
-        else if (loaded->GetTypeName() == "Rotator")
-            result = Fail("the type gap is closed: make the scene check strict");
-        else
-            std::printf("SmokeTest: KNOWN GAP: the scene saves the native base type of a script component\n");
-
-        loadedScene.Reset();
-        scene.Reset();
+        // The second plugin instance registers a new TypeInfo. A scene still keeps the script type.
+        for (const char* className : {"Rotator", "Rotator2"})
+        {
+            SharedPtr<Object> object = context->CreateObject(StringHash(className));
+            if (!ReportsRegisteredType(context, object, className))
+                result = Fail("a script component does not report its registered type in the second plugin instance");
+        }
+        for (const char* className : {"Rotator", "Rotator2"})
+        {
+            if (SceneRoundTrip(context, className) != className)
+                result = Fail("a scene does not keep the type of a script component in the second plugin instance");
+        }
         plugin->UnloadPlugin();
         plugin.Reset();
     }
