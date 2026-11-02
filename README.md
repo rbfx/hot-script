@@ -68,6 +68,31 @@ Give the class a native base that derives from `RefCounted` instead.
 `Project/Data/Scripts/Spawner.hot` is the sample.
 The smoke test checks that its weak handle gives null after the node is removed.
 
+### Reflected script types
+
+The prelude declares the Hot++ script attribute `ReflectedObject`.
+Put it on a script class to register the class with the engine:
+
+```hot
+[ReflectedObject]
+class Rotator : Urho3D.LogicComponent { ... }
+```
+
+- After each script load, the `ScriptSystem` registers each new class with this attribute.
+- The engine factory makes the class by its name: `Context::CreateObject` and `Node::CreateComponent`.
+- The engine attributes of the native base are copied to the script type.
+- The primary native base must be an engine type, for example `LogicComponent`.
+- Here, "attribute" is a Hot++ tag. An "engine attribute" is a reflected rbfx property.
+
+Limits (TODO comments in `ScriptSystem::RegisterReflectedTypes`):
+
+- `GetType`, `GetTypeName` and `GetTypeInfo` give the native base, not the script type.
+  So a scene save writes the base type, and a scene load does not make the script class.
+- A plugin unload and a removed class do not unregister the type.
+- Script fields are not engine attributes yet.
+
+`Project/Data/Scripts/Rotator.hot` is the sample. The smoke test makes it by its name.
+
 ### Hot reload
 
 The subsystem polls the stamp of each loaded script every 500 ms, in the `E_ENDFRAME` handler.

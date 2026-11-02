@@ -9,3 +9,8 @@
 // is its weak handle ("[weak] T x"). The rule is also for a script class with such a native base,
 // for example a script class that derives from Urho3D::LogicComponent.
 [native, handle("Urho3D::SharedPtr<$T>"), weak_handle("Urho3D::WeakPtr<$T>")] class Urho3D.RefCounted;
+
+// "[ReflectedObject] class C : Urho3D.LogicComponent { }" registers the script class C with the
+// engine after each load: Context::CreateObject and Node::CreateComponent then make C by its name.
+// The primary native base must be an engine type, for example a class that derives from Object.
+[attribute] class ReflectedObject;

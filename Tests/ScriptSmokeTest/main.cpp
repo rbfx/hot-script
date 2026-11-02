@@ -151,6 +151,32 @@ int main(int argc, char** argv)
         else
             result = Fail("CreateObject(Spawner) returned null");
 
+        // Reflected script types: Rotator has the attribute ReflectedObject, so the engine knows it.
+        // The engine factory makes it by its name. Spawner has no attribute: the engine does not know it.
+        if (ObjectReflection* reflection = context->GetReflection(StringHash("Rotator")))
+        {
+            const TypeInfo* base = reflection->GetTypeInfo()->GetBaseTypeInfo();
+            if (!base || base->GetType() != LogicComponent::GetTypeStatic())
+                result = Fail("the base of the reflected type Rotator is not LogicComponent");
+            if (!context->CreateObject(StringHash("Rotator")))
+                result = Fail("Context::CreateObject(Rotator) returned null");
+            Node* node = scene->CreateChild("ReflectedRotator");
+            auto* component = dynamic_cast<LogicComponent*>(node->CreateComponent(StringHash("Rotator")));
+            if (!component)
+                result = Fail("Node::CreateComponent(Rotator) did not make a script component");
+            else
+            {
+                component->Update(0.5f);
+                std::printf("SmokeTest: reflected Rotator yaw after 0.5 s = %.1f\n", YawOf(node));
+                if (YawOf(node) < 40.0f || YawOf(node) > 50.0f)
+                    result = Fail("unexpected yaw of the reflected Rotator");
+            }
+        }
+        else
+            result = Fail("Rotator is not registered with the engine");
+        if (context->GetReflection(StringHash("Spawner")))
+            result = Fail("Spawner is registered with the engine, but it has no attribute");
+
         // Hot reload: change the speed of Rotator2 and reload. The live component keeps its node.
         Node* node2 = scene->GetChild("Rotator2");
         auto* rotator2 = node2 ? node2->GetComponent<LogicComponent>() : nullptr;

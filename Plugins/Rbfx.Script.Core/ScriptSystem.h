@@ -11,6 +11,7 @@
 #include <Urho3D/Core/Timer.h>
 
 #include <EASTL/unordered_map.h>
+#include <EASTL/unordered_set.h>
 
 #include <memory>
 
@@ -143,6 +144,8 @@ private:
     bool CompileAndApply(const ea::string& name);
     /// Poll the stamps and reload the changed scripts.
     void PollScripts();
+    /// Register each live script class with the attribute ReflectedObject with the engine.
+    void RegisterReflectedTypes();
     /// Log an error and keep it as the last error.
     void ReportError(const ea::string& message);
     void HandleEndFrame(StringHash eventType, VariantMap& eventData);
@@ -156,6 +159,8 @@ private:
     bool backendFailed_{};
     /// The compiled scripts: the loaded scripts and the scripts with a compile error.
     ea::unordered_map<ea::string, ScriptStatus> scripts_;
+    /// The script classes that this subsystem registered with the engine.
+    ea::unordered_set<StringHash> reflectedTypes_;
     ea::vector<ea::string> extraIncludeDirs_;
     ea::vector<ea::string> extraFlags_;
     bool autoReload_{true};

@@ -5,6 +5,8 @@ using "Urho3D/Core/Context.h";
 using "Urho3D/Scene/LogicComponent.h";
 using "Urho3D/Scene/Node.h";
 
+// "[ReflectedObject]" registers Rotator with the engine (see the prelude).
+[ReflectedObject]
 class Rotator : Urho3D.LogicComponent {
     float speed = 90.0f;
 

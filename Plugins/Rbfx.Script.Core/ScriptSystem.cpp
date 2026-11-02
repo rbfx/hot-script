@@ -6,12 +6,15 @@
 #include "Rbfx.Script.Core/ScriptSourceFileSystem.h"
 
 #include <Urho3D/Core/CoreEvents.h>
+#include <Urho3D/Core/ObjectReflection.h>
 #include <Urho3D/IO/Log.h>
 
+#include <EASTL/algorithm.h>
 #include <EASTL/sort.h>
 
 #include <hot/backend.h>
 #include <hot/runtime/loader.h>
+#include <hot/runtime/records.h>
 #include <hot/runtime/threads.h>
 
 #include <exception>
@@ -41,6 +44,32 @@ ea::string FormatResult(const hot::ReloadResult& result)
     if (!result.error.empty())
         text += ": " + ToEaString(result.error);
     return text;
+}
+
+// The script attribute that registers a script class with the engine (see the prelude).
+const char* const ReflectedObjectAttribute = "ReflectedObject";
+
+// The engine type name of the primary native base. Hot++ gives the C++ names of the native bases
+// with ", " between them, for example "Urho3D::LogicComponent, IFoo". The result is "LogicComponent".
+ea::string EngineBaseName(const char* baseList)
+{
+    ea::string base = baseList ? baseList : "";
+    const auto comma = base.find(',');
+    if (comma != ea::string::npos)
+        base.resize(comma);
+    const auto colon = base.rfind(':');
+    if (colon != ea::string::npos)
+        base = base.substr(colon + 1);
+    base.trim();
+    return base;
+}
+
+// The engine factory of a reflected script class: the ScriptSystem makes the object by its name.
+// The native pointer points to the primary native base. Object is at offset zero of it.
+SharedPtr<Object> CreateReflectedObject(const TypeInfo* typeInfo, Context* context)
+{
+    auto* system = context->GetSubsystem<ScriptSystem>();
+    return system ? system->CreateObject<Object>(typeInfo->GetTypeName()) : nullptr;
 }
 
 // The script modules resolve the Hot++ runtime and the host symbols in the global scope.
@@ -211,7 +240,48 @@ bool ScriptSystem::CompileAndApply(const ea::string& name)
     }
     lastError_.clear();
     URHO3D_LOGINFO("ScriptSystem: loaded '{}' (generation {})", name, hot::active_generation);
+    RegisterReflectedTypes();
     return true;
+}
+
+void ScriptSystem::RegisterReflectedTypes()
+{
+    // TODO: Unregister all script types from the engine when the plugin unloads.
+    // TODO: Register new classes on reload also when Update commits a pending reload.
+    // TODO: Unregister removed classes. The engine can still hold objects of them.
+    // TODO: Register the engine attributes of new fields on reload.
+    // TODO: Register the fields or properties with an [Attribute] tag as engine attributes.
+    // TODO: Override GetType, GetTypeName and GetTypeInfo in the shell. The objects then report
+    // the script type, and a scene save keeps the script type.
+    for (const hot::ClassInfo& info : loader_->stats().classes)
+    {
+        if (info.removed
+            || ea::find(info.attributes.begin(), info.attributes.end(), ReflectedObjectAttribute) == info.attributes.end())
+            continue;
+        const ea::string name = ToEaString(info.name);
+        const StringHash type(name);
+        if (reflectedTypes_.count(type) != 0)
+            continue;
+        if (context_->GetReflection(type))
+        {
+            URHO3D_LOGWARNING("ScriptSystem: cannot register '{}': the engine has a type with this name", name);
+            continue;
+        }
+        const hot::ClassEntry* entry = loader_->find(info.name.c_str());
+        const ea::string baseName = entry ? EngineBaseName(entry->record->base_name) : ea::string{};
+        ObjectReflection* baseReflection = context_->GetReflection(StringHash(baseName));
+        if (!baseReflection)
+        {
+            URHO3D_LOGWARNING("ScriptSystem: cannot register '{}': the base '{}' is not an engine type", name, baseName);
+            continue;
+        }
+        ObjectReflection* reflection
+            = context_->ReflectCustomType(ea::make_unique<TypeInfo>(name.c_str(), baseReflection->GetTypeInfo()));
+        reflection->SetObjectFactory(&CreateReflectedObject);
+        reflection->CopyAttributesFrom(baseReflection);
+        reflectedTypes_.insert(type);
+        URHO3D_LOGINFO("ScriptSystem: registered '{}' with the engine (base '{}')", name, baseName);
+    }
 }
 
 bool ScriptSystem::LoadScript(const ea::string& name)
