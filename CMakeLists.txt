@@ -19,8 +19,6 @@ if(NOT CMAKE_PREFIX_PATH)
     get_filename_component(_RBFX_SCRIPT_SIBLING_CMAKE "${CMAKE_CURRENT_SOURCE_DIR}/../rbfx/CMake" ABSOLUTE)
     if(EXISTS "${_RBFX_SCRIPT_SIBLING_CMAKE}")
         set(_RBFX_SCRIPT_DEFAULT_PREFIX "${_RBFX_SCRIPT_SIBLING_CMAKE}")
-    else()
-        set(_RBFX_SCRIPT_DEFAULT_PREFIX "/home/rk/src/rbfx/rbfx/CMake")
     endif()
     set(RBFX_SCRIPT_ENGINE_PREFIX "${_RBFX_SCRIPT_DEFAULT_PREFIX}" CACHE PATH
         "Default engine prefix path. It applies only when CMAKE_PREFIX_PATH is empty.")
@@ -32,9 +30,24 @@ find_package(Urho3D REQUIRED)
 set(HOT_BUILD_TESTS OFF CACHE BOOL "" FORCE)
 set(HOT_BUILD_SAMPLES OFF CACHE BOOL "" FORCE)
 set(HOT_INSTALL OFF CACHE BOOL "" FORCE)
-if(NOT EXISTS "${CMAKE_CURRENT_SOURCE_DIR}/hotpp/CMakeLists.txt")
+set(HOT_BUILD_LS OFF CACHE BOOL "" FORCE)
+set(HOT_BUILD_VSCODE OFF CACHE BOOL "" FORCE)
+# Use the sibling checkout ../hotpp when it exists. Else use the hotpp submodule.
+get_filename_component(_RBFX_SCRIPT_SIBLING_HOTPP "${CMAKE_CURRENT_SOURCE_DIR}/../hotpp" ABSOLUTE)
+if(EXISTS "${_RBFX_SCRIPT_SIBLING_HOTPP}/CMakeLists.txt")
+    set(RBFX_SCRIPT_HOTPP_DIR "${_RBFX_SCRIPT_SIBLING_HOTPP}")
+elseif(EXISTS "${CMAKE_CURRENT_SOURCE_DIR}/hotpp/CMakeLists.txt")
+    set(RBFX_SCRIPT_HOTPP_DIR "${CMAKE_CURRENT_SOURCE_DIR}/hotpp")
+else()
     message(FATAL_ERROR
-        "Missing hotpp/CMakeLists.txt. Run: git submodule update --init --recursive")
+        "Missing ../hotpp and hotpp/CMakeLists.txt. Run: git submodule update --init --recursive")
+endif()
+message(STATUS "Hot++ source: ${RBFX_SCRIPT_HOTPP_DIR}")
+# CPM caches the folder of its script. A build folder that used another Hot++ copy keeps the old
+# folder. Then CPM.cmake of the new copy returns early and CPMAddPackage stays undefined.
+if(CPM_DIRECTORY AND NOT COMMAND CPMAddPackage)
+    unset(CPM_DIRECTORY CACHE)
+    unset(CPM_FILE CACHE)
 endif()
 # The Hot++ translator uses libclang, and libclang needs the Clang resource folder (stddef.h and
 # the other compiler headers). Hot++ asks the compiler of the build for the folder, but only a
@@ -63,7 +76,7 @@ endif()
 if(BUILD_SHARED_LIBS)
     set(CMAKE_POSITION_INDEPENDENT_CODE ON)
 endif()
-add_subdirectory(hotpp)
+add_subdirectory("${RBFX_SCRIPT_HOTPP_DIR}" hotpp)
 
 # A script module reads the call depth of Hot++ (a thread-local variable) with the initial-exec
 # model. The engine opens a plugin with dlopen. Then glibc gives the plugin static TLS only when

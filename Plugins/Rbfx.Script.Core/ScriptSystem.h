@@ -13,7 +13,11 @@
 #include <EASTL/unordered_map.h>
 #include <EASTL/unordered_set.h>
 
+#include <hot/runtime/migration.h>
+
+#include <functional>
 #include <memory>
+#include <utility>
 
 namespace hot
 {
@@ -94,15 +98,29 @@ public:
     }
 
     /// Create an object of a script class. Return null when the class is not live.
+    /// A class with the constructor "(Urho3D::Context*)" gets "context", or the context of the
+    /// system when "context" is null. Another class uses its default constructor.
     /// The pointer points to the native base of the class (the first base of the script class).
     /// The caller owns the object.
-    virtual void* CreateNative(const ea::string& className);
+    virtual void* CreateNative(const ea::string& className, Context* context = nullptr);
     /// Create an object of a script class with the native base T, for example LogicComponent.
     /// T must be the first native base of the script class, or a base of it at offset zero.
     template <class T> SharedPtr<T> CreateObject(const ea::string& className)
     {
         return SharedPtr<T>(static_cast<T*>(CreateNative(className)));
     }
+    /// Create an object of a script class with the script constructor whose parameter types are
+    /// the types of "args", without references and top-level const (hot::ClassEntry::construct).
+    /// The match is exact: no conversion. Return null and report an error when the class is not
+    /// live, when no constructor matches or when the constructor throws.
+    template <class T, class... Args> SharedPtr<T> CreateObjectWithArgs(const ea::string& className, Args&&... args)
+    {
+        return SharedPtr<T>(static_cast<T*>(CreateNativeWith(className,
+            [&](const hot::ClassEntry& entry) { return entry.construct(std::forward<Args>(args)...).native; })));
+    }
+    /// Call "make" with the Hot++ entry of a live script class and return its result. Return null
+    /// and report an error when the class is not live or when "make" throws.
+    virtual void* CreateNativeWith(const ea::string& className, const std::function<void*(const hot::ClassEntry&)>& make);
 
     /// Poll the scripts, commit a pending reload and let Hot++ unload old code.
     /// The handler of E_ENDFRAME calls it.
@@ -176,6 +194,7 @@ private:
     void RegisterReflectedTypes();
     /// Log an error and keep it as the last error.
     void ReportError(const ea::string& message);
+    const hot::ClassEntry* FindLiveClass(const ea::string& className);
     void HandleEndFrame(StringHash eventType, VariantMap& eventData);
 
     std::shared_ptr<IScriptSource> source_;

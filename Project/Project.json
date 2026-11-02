@@ -1,8 +1,17 @@
 {
+	"LaunchManager": {
+		"Configurations": [
+			{
+				"MainPlugin": "RbfxScript.Main",
+				"Name": "Configuration 0"
+			}
+		]
+	},
 	"PluginManager": {
 		"LoadedPlugins": [
 			"Plugin.Rbfx.Script",
-			"RbfxScript.Main"
+			"RbfxScript.Main",
+			"Builtin.SceneViewer"
 		]
 	}
 }

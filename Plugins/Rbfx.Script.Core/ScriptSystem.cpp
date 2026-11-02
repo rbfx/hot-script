@@ -74,7 +74,15 @@ ea::string EngineBaseName(const char* baseList)
 SharedPtr<Object> CreateReflectedObject(const TypeInfo* typeInfo, Context* context)
 {
     auto* system = context->GetSubsystem<ScriptSystem>();
-    return system ? system->CreateObject<Object>(typeInfo->GetTypeName()) : nullptr;
+    return system ? SharedPtr<Object>(static_cast<Object*>(system->CreateNative(typeInfo->GetTypeName(), context)))
+                  : nullptr;
+}
+
+// Makes an object of a script class. The constructor "(Urho3D::Context*)" comes first. A class
+// without it uses the default constructor (the factory of the class).
+void* CreateWithContext(const hot::ClassEntry& entry, Context* context)
+{
+    return entry.construct(context).native;
 }
 
 // The script modules resolve the Hot++ runtime and the host symbols in the global scope.
@@ -444,7 +452,7 @@ const TypeInfo* ScriptSystem::ShellTypeInfo(const ea::string& className)
     const hot::ClassEntry* entry = loader_ ? loader_->find(className.c_str()) : nullptr;
     if (!entry || !entry->create)
         return nullptr;
-    SharedPtr<Object> object(static_cast<Object*>(entry->create().native));
+    SharedPtr<Object> object(static_cast<Object*>(CreateWithContext(*entry, GetContext())));
     if (!object)
         return nullptr;
     const TypeInfo* typeInfo = object->GetTypeInfo();
@@ -511,7 +519,8 @@ unsigned ScriptSystem::LoadAllScripts()
     return count;
 }
 
-void* ScriptSystem::CreateNative(const ea::string& className)
+// The entry of a live script class, or null after an error report.
+const hot::ClassEntry* ScriptSystem::FindLiveClass(const ea::string& className)
 {
     if (!loader_)
     {
@@ -524,7 +533,30 @@ void* ScriptSystem::CreateNative(const ea::string& className)
         ReportError(Format("cannot create '{}': the class is not live", className));
         return nullptr;
     }
-    return entry->create().native;
+    return entry;
+}
+
+void* ScriptSystem::CreateNative(const ea::string& className, Context* context)
+{
+    const hot::ClassEntry* entry = FindLiveClass(className);
+    return entry ? CreateWithContext(*entry, context) : nullptr;
+}
+
+void* ScriptSystem::CreateNativeWith(
+    const ea::string& className, const std::function<void*(const hot::ClassEntry&)>& make)
+{
+    const hot::ClassEntry* entry = FindLiveClass(className);
+    if (!entry)
+        return nullptr;
+    try
+    {
+        return make(*entry);
+    }
+    catch (const std::exception& e)
+    {
+        ReportError(Format("cannot create '{}': {}", className, e.what()));
+        return nullptr;
+    }
 }
 
 void ScriptSystem::PollScripts()

@@ -9,13 +9,15 @@
 // Urho3D::SharedPtr holds an object that derives from Urho3D::RefCounted, and Urho3D::WeakPtr
 // is its weak handle ("[weak] T x"). The rule is also for a script class with such a native base,
 // for example a script class that derives from Urho3D::LogicComponent.
-[native, handle("Urho3D::SharedPtr<$T>"), weak_handle("Urho3D::WeakPtr<$T>")] class Urho3D.RefCounted;
+[native, handle("Urho3D::SharedPtr<$T>"), weak_handle("Urho3D::WeakPtr<$T>")]
+class Urho3D.RefCounted;
 
 // "[ReflectedObject] class C : Urho3D.LogicComponent { }" registers the script class C with the
 // engine after each load: Context::CreateObject and Node::CreateComponent then make C by its name.
 // The primary native base must be an engine type, for example a class that derives from Object.
 // A .cpp script writes RBFX_SCRIPT_REFLECTED after "class" (Rbfx.Script.Core/ScriptReflection.h).
-[attribute] class ReflectedObject;
+[attribute]
+class ReflectedObject;
 
 // Each script class below Urho3D::Object reports its own type: the shell gets URHO3D_OBJECT with
 // the script class name and the C++ base. The engine registers the static TypeInfo of the shell,

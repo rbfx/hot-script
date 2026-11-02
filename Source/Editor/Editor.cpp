@@ -4,9 +4,11 @@
 // The editor of rbfx with the "Scripts" tab. Open the demo project:
 //   RbfxScriptEditor <path of rbfx-script>/Project
 
-#include <Rbfx.Script.Editor/ScriptsTab.h>
+#include <Urho3D/Engine/EngineDefs.h>
 
 #include <Editor/EditorApplication.h>
+
+#include <Rbfx.Script.Editor/ScriptsTab.h>
 
 using namespace Urho3D;
 
@@ -23,6 +25,7 @@ public:
 
         EditorApplication::Setup();
         LinkedPlugins::RegisterStaticPlugins();
+        engineParameters_[EP_RESOURCE_ROOT_FILE] = "ResourceRoot.ini";
     }
     /// @}
 };

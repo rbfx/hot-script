@@ -1,3 +1,4 @@
 [submodule "hotpp"]
 	path = hotpp
 	url = https://github.com/rokups/hotpp.git
+	branch = master

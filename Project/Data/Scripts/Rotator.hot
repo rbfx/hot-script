@@ -1,22 +1,21 @@
-// Test input of the smoke test. Rotator: a LogicComponent in a Hot++ script. It turns its node around the Y axis.
-// The factory of a script class takes no arguments, so the constructor gets the context
-// from Context::GetInstance.
 using "Urho3D/Core/Context.h";
 using "Urho3D/Scene/LogicComponent.h";
 using "Urho3D/Scene/Node.h";
 
-// "[ReflectedObject]" registers Rotator with the engine (see the prelude).
 [ReflectedObject]
 class Rotator : Urho3D.LogicComponent {
     float speed = 90.0f;
 
-    Rotator() : base(Urho3D.Context.GetInstance()) {
+    Rotator(Urho3D.Context* context) : base(context) {
     }
 
     override void Update(float timeStep) {
         Urho3D.Node* node = GetNode();
         if (node != null) {
-            node.Rotate(Urho3D.Quaternion(0.0f, speed * timeStep, 0.0f), Urho3D.TS_LOCAL);
+            node.Rotate(Urho3D.Quaternion(
+                speed * timeStep,
+                speed * timeStep,
+                0.0f), Urho3D.TS_LOCAL);
         }
     }
 }

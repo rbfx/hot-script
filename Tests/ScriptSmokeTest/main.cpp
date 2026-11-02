@@ -370,9 +370,8 @@ int main(int argc, char** argv)
             if (!rotator2Error().empty())
                 result = Fail("the background reload reports an error");
 
-            // User preludes. Game.prelude.hot adds a cpp_prelude line to the library rule of
-            // "class : Urho3D.Object" and declares [Tunable] for Spawner. The library text stays:
-            // the script components above still report their registered types.
+            // User preludes. The test adds a user prelude to the copy of the data folder. The library
+            // text stays: the script components above still report their registered types.
             {
                 const auto scriptError = [&](const char* name)
                 {
@@ -400,11 +399,13 @@ int main(int argc, char** argv)
                     return 0;
                 };
                 const auto spawnerLive = [&] { return system->CreateObject<LogicComponent>("Spawner") != nullptr; };
-                const std::string preludePath = dataDir + "/Scripts/Game.prelude.hot";
+                const std::string preludePath = dataDir + "/Scripts/Test.prelude.hot";
                 const std::string overridePath = dataDir + "/Scripts/Zz.prelude.hot";
-                std::string preludeText;
-                if (!ReadFile(preludePath, preludeText))
-                    result = Fail("no Game.prelude.hot");
+                const std::string preludeText =
+                    "[cpp_prelude(\"using ScriptNativeBase = $B;\")]\nclass : Urho3D.Object;\n";
+                WriteFile(preludePath, preludeText);
+                if (compileAll("a new user prelude does not start a compile") != 0)
+                    result = 1;
                 if (!scriptError("Scripts/Spawner.hot").empty())
                     result = Fail("Spawner does not compile with the user prelude");
 
@@ -438,7 +439,7 @@ int main(int argc, char** argv)
                 if (compileAll("a changed user prelude does not start a compile") != 0)
                     result = 1;
                 const ea::string brokenError = scriptError("Scripts/Spawner.hot");
-                if (brokenError.find("Game.prelude.hot") == ea::string::npos || !spawnerLive() || !near(yawOfOneUpdate(), 90.0f))
+                if (brokenError.find("Test.prelude.hot") == ea::string::npos || !spawnerLive() || !near(yawOfOneUpdate(), 90.0f))
                     result = Fail("a broken user prelude does not keep the old code or does not name the prelude");
 
                 writePrelude(preludeText);
@@ -448,6 +449,10 @@ int main(int argc, char** argv)
                     result = Fail("the scripts do not compile after the user prelude is restored");
                 if (!ReportsRegisteredType(context, rotator2, "Rotator2"))
                     result = Fail("the library prelude text is lost after the user prelude changes");
+
+                stdfs::remove(preludePath, ec);
+                if (compileAll("a removed user prelude does not start a compile") != 0)
+                    result = 1;
             }
 
             // A compile error keeps the old code.
