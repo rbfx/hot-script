@@ -5,10 +5,10 @@ Script support for rbfx. It uses Hot++ for hot reload.
 ## Layout
 
 - `hotpp/`: Hot++ submodule.
-- `Plugins/Rbfx.Script.Core/`: shared script core (static library `Rbfx.Script.Core`).
+- `Plugins/Rbfx.Script.Core/`: script core `Rbfx.Script.Core`. It is a shared library when the engine is shared.
 - `Plugins/Rbfx.Script/`: game plugin (`Plugin.Rbfx.Script`).
-- `Plugins/Rbfx.Script.Editor/`: editor plugin.
-- `Source/Editor/`: custom editor.
+- `Plugins/Rbfx.Script.Editor/`: editor plugin (`Plugin.Rbfx.Script.Editor`, a static library for the custom editor).
+- `Source/Editor/`: custom editor `RbfxScriptEditor`.
 - `Tests/ScriptSmokeTest/`: end-to-end test of the game plugin.
 - `Project/`: editor demo project. `Project/Data/Scripts/` has the sample scripts.
 
@@ -40,7 +40,13 @@ CMake writes them to a generated file. The script compile uses them.
 The game plugin `Plugin.Rbfx.Script` registers the `ScriptSystem` subsystem in `Load`.
 Its source is `ResourceScriptSource`: the `.hot` and `.cpp` files of the `Scripts` resource folder.
 The plugin loads all these scripts in `Load`.
-The editor plugin supplies its own source and uses the same core.
+The editor plugin has the source `DiskScriptSource`: one folder on the disk, without the ResourceCache.
+It adds the "Scripts" tab to the editor.
+The tab shows the script folder, the scripts, their classes, the generation and the compile errors.
+The Reload button compiles all scripts of the folder again.
+The default folder is `<project data folder>/Scripts`.
+Type a folder relative to the project folder and click "Apply Folder" to change it.
+The project `ui.ini` keeps the folder (entry `ScriptDir`).
 
 ### Hot reload
 
@@ -61,17 +67,27 @@ A changed header does not start a reload. Call `ReloadScript` for it.
 - A GCC build compiles the scripts with the `clang++` of the system.
   The run-time compile needs `clang++` and its resource folder.
 - The process must have one copy of the Hot++ runtime state.
-  The operations of `ScriptSystem` are virtual, so a module with only the header calls the plugin code.
-  Do not link `Rbfx.Script.Core` into a module only to call the subsystem of the plugin.
+  With a shared engine, `Rbfx.Script.Core` is a shared library, and all plugins link it.
+  Each plugin calls `ScriptSystem::GetOrCreateShared`.
+  It registers a `ScriptSystem` only when the context has none.
+  The plugin that makes the subsystem removes it. The other plugin uses it.
+  With a static engine, link the core into one module only.
+  The operations of `ScriptSystem` are virtual, so a module with only the header calls the code of the core.
 - Linux: the Hot++ runtime compiles with `-ftls-model=initial-exec`.
   This marks the plugin `STATIC_TLS`. So glibc gives the plugin static TLS when the engine opens it.
   The script modules read the call depth of Hot++ from static TLS.
 
 ### Editor demo
 
-Open the `Project/` folder in the editor. `Project/Project.json` loads `Plugin.Rbfx.Script`.
-The plugin loads the scripts of `Project/Data/Scripts/`.
+    cmake --build cmake-build --target RbfxScriptEditor
+    cmake-build/bin/RbfxScriptEditor "$PWD/Project"
+
+The editor build needs `URHO3D_EDITOR` (the `EditorLibrary` target).
+The project folder is a positional argument of the editor.
+The "Scripts" tab loads the scripts of `Project/Data/Scripts/`.
 `Rotator.hot` and `Rotator2.cpp` are `LogicComponent` classes that turn their node.
+`Project/Project.json` also loads the game plugin `Plugin.Rbfx.Script`, for the play mode.
+The game plugin then uses the `ScriptSystem` of the tab. So the editor has one script system.
 
 ### Smoke test
 
