@@ -1,0 +1,11 @@
+// The user prelude of the sample project. The script system gives each "*.prelude.hot" file in the
+// script folder to the translator after the library prelude, in the order of the paths. It does
+// not compile this file as a script. A stub here refines the stub of the library with the same key.
+
+// A script attribute of the game. Spawner.hot uses it.
+[attribute] class Tunable;
+
+// Refine the library rule of the script classes below Urho3D::Object. The shell keeps the
+// URHO3D_OBJECT line and the cpp_overrides of the library prelude, and gets this line after them.
+[cpp_prelude("using ScriptNativeBase = $B;")]
+class : Urho3D.Object;

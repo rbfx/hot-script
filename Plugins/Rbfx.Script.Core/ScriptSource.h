@@ -24,6 +24,7 @@ public:
     virtual ~IScriptSource() = default;
 
     /// Return the names of all scripts (".hot" and ".cpp" files). Headers are not scripts.
+    /// The list includes the user preludes ("*.prelude.hot"). The script system does not compile them as scripts.
     virtual ea::vector<ea::string> ListScripts() = 0;
     /// Read the text of a script or of a header. Return false when the file does not exist.
     virtual bool ReadText(const ea::string& name, ea::string& text) = 0;
@@ -38,5 +39,7 @@ public:
 
 /// Return true when the name has the suffix ".hot" or ".cpp".
 RBFX_SCRIPT_CORE_API bool IsScriptFileName(const ea::string& name);
+/// Return true when the name has the suffix ".prelude.hot": a user prelude, not a script.
+RBFX_SCRIPT_CORE_API bool IsPreludeFileName(const ea::string& name);
 
 } // namespace Urho3D

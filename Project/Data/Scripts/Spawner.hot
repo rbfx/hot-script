@@ -14,7 +14,8 @@ class Counter {
 }
 
 // "[ReflectedObject]" registers Spawner with the engine. Counter has no tag: the engine does not know it.
-[ReflectedObject]
+// "[Tunable]" is a script attribute of the user prelude Game.prelude.hot.
+[ReflectedObject, Tunable]
 class Spawner : Urho3D.LogicComponent {
     Urho3D.Node child = null;
     [weak]

@@ -13,6 +13,11 @@ bool IsScriptFileName(const ea::string& name)
     return name.ends_with(".hot") || name.ends_with(".cpp");
 }
 
+bool IsPreludeFileName(const ea::string& name)
+{
+    return name.ends_with(".prelude.hot");
+}
+
 ScriptSourceFileSystem::ScriptSourceFileSystem(std::shared_ptr<IScriptSource> source)
     : source_(std::move(source))
 {

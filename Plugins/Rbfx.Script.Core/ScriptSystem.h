@@ -170,6 +170,8 @@ private:
     void FinishCompile(bool wait);
     /// Poll the stamps and queue the changed scripts for a background compile.
     void PollScripts();
+    /// Give the changed user preludes to the backend and queue all scripts for a background compile.
+    void ApplyUserPreludes();
     /// Register each live script class with the attribute ReflectedObject with the engine.
     void RegisterReflectedTypes();
     /// Log an error and keep it as the last error.
@@ -197,6 +199,10 @@ private:
     std::unique_ptr<CompileJob> job_;
     /// The scripts that wait for a background compile, in order. A name is in the queue one time only.
     ea::vector<ea::string> compileQueue_;
+    /// The names and stamps of the user preludes that the backend has, sorted by name.
+    ea::vector<ea::pair<ea::string, unsigned long long>> preludeStamps_;
+    /// True when the poll found a changed, new or removed user prelude.
+    bool preludesChanged_{};
     /// The handle that makes the symbols of this module global (see ScriptSystem.cpp).
     void* selfHandle_{};
 };

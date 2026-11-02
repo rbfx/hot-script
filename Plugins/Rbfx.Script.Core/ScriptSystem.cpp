@@ -154,6 +154,46 @@ void ScriptSystem::ReportError(const ea::string& message)
     URHO3D_LOGERROR("ScriptSystem: {}", message);
 }
 
+namespace
+{
+
+/// The user preludes of the source and their stamps, sorted by name.
+ea::vector<ea::pair<ea::string, unsigned long long>> ListUserPreludes(IScriptSource& source)
+{
+    ea::vector<ea::pair<ea::string, unsigned long long>> result;
+    ea::vector<ea::string> names = source.ListScripts();
+    ea::sort(names.begin(), names.end());
+    for (const ea::string& name : names)
+    {
+        if (IsPreludeFileName(name))
+            result.emplace_back(name, source.GetModificationStamp(name));
+    }
+    return result;
+}
+
+/// The preludes for the backend: the library prelude, then the user preludes in the order of the names.
+/// A later prelude refines the rules of an earlier one. The stamps are read before the texts.
+std::vector<std::pair<std::string, std::string>> ReadPreludes(
+    IScriptSource& source, ea::vector<ea::pair<ea::string, unsigned long long>>& stamps)
+{
+    std::vector<std::pair<std::string, std::string>> preludes;
+    preludes.emplace_back(kRbfxPreludeName, kRbfxPreludeText);
+    stamps = ListUserPreludes(source);
+    for (const auto& [name, stamp] : stamps)
+    {
+        ea::string text;
+        if (!source.ReadText(name, text))
+        {
+            URHO3D_LOGERROR("ScriptSystem: cannot read the user prelude '{}'", name);
+            continue;
+        }
+        preludes.emplace_back(ScriptSourceFileSystem::ToBackendPath(name), std::string(text.c_str(), text.size()));
+    }
+    return preludes;
+}
+
+} // namespace
+
 bool ScriptSystem::EnsureBackend()
 {
     if (backend_ && loader_)
@@ -178,8 +218,9 @@ bool ScriptSystem::EnsureBackend()
         options.extra_flags.emplace_back(flag.c_str());
     fileSystem_ = std::make_shared<ScriptSourceFileSystem>(source_);
     options.fs = fileSystem_;
-    // The embedded prelude: the EASTL namespace and the Urho3D::SharedPtr and Urho3D::WeakPtr handles.
-    options.preludes.emplace_back(kRbfxPreludeName, kRbfxPreludeText);
+    // The embedded prelude (the EASTL namespace, the Urho3D::SharedPtr and Urho3D::WeakPtr handles),
+    // then the user preludes of the source.
+    options.preludes = ReadPreludes(*source_, preludeStamps_);
 
     try
     {
@@ -195,7 +236,8 @@ bool ScriptSystem::EnsureBackend()
         return false;
     }
 
-    URHO3D_LOGINFO("ScriptSystem: Hot++ backend '{}', scripts from {}", backend_->name(), source_->GetDescription());
+    URHO3D_LOGINFO("ScriptSystem: Hot++ backend '{}', scripts from {}, {} user preludes", backend_->name(),
+        source_->GetDescription(), preludeStamps_.size());
     return true;
 }
 
@@ -430,6 +472,11 @@ void ScriptSystem::UnregisterReflectedTypes()
 
 bool ScriptSystem::LoadScript(const ea::string& name)
 {
+    if (IsPreludeFileName(name))
+    {
+        ReportError(Format("'{}' is a user prelude, not a script: each script gets it", name));
+        return false;
+    }
     if (!IsScriptFileName(name))
     {
         ReportError(Format("'{}' is not a script: the name must end with .hot or .cpp", name));
@@ -458,7 +505,7 @@ unsigned ScriptSystem::LoadAllScripts()
     unsigned count = 0;
     for (const ea::string& name : names)
     {
-        if (LoadScript(name))
+        if (!IsPreludeFileName(name) && LoadScript(name))
             ++count;
     }
     return count;
@@ -484,6 +531,9 @@ void ScriptSystem::PollScripts()
 {
     if (!source_)
         return;
+    // A change, an addition or a removal of a user prelude compiles all scripts again (see Update).
+    if (backend_ && !preludesChanged_ && ListUserPreludes(*source_) != preludeStamps_)
+        preludesChanged_ = true;
     // A script with a compile error is polled too: a fixed file then loads.
     ea::vector<ea::string> changed;
     for (const auto& [name, status] : scripts_)
@@ -500,6 +550,29 @@ void ScriptSystem::PollScripts()
             continue;
         URHO3D_LOGINFO("ScriptSystem: '{}' changed, reloading", name);
         compileQueue_.push_back(name);
+    }
+}
+
+void ScriptSystem::ApplyUserPreludes()
+{
+    preludesChanged_ = false;
+    if (!backend_->set_preludes(ReadPreludes(*source_, preludeStamps_)))
+    {
+        ReportError("the Hot++ backend cannot change its preludes: restart to use the changed user preludes");
+        return;
+    }
+    // Each script compiles again with the new preludes. Until its compile succeeds, its old code
+    // runs. A broken prelude gives a compile error for each script, and the old code stays.
+    ea::vector<ea::string> names;
+    for (const auto& [name, status] : scripts_)
+        names.push_back(name);
+    ea::sort(names.begin(), names.end());
+    URHO3D_LOGINFO("ScriptSystem: the user preludes changed ({} files), compiling {} scripts", preludeStamps_.size(),
+        names.size());
+    for (const ea::string& name : names)
+    {
+        if (ea::find(compileQueue_.begin(), compileQueue_.end(), name) == compileQueue_.end())
+            compileQueue_.push_back(name);
     }
 }
 
@@ -545,6 +618,9 @@ void ScriptSystem::Update()
         if (result.status != hot::ReloadStatus::Applied)
             ReportError(Format("cannot commit a pending reload: {}", FormatResult(result)));
     }
+    // Changed user preludes go to the backend when no compile runs.
+    if (preludesChanged_ && !job_)
+        ApplyUserPreludes();
     // The next compile starts after the commit, so it reads the new slot state.
     StartNextCompile();
     loader_->frame_boundary();

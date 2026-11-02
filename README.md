@@ -31,6 +31,7 @@ The file has these parts:
 - The engine include folders, definitions and options of the target `Rbfx.Script.Core`. Thus `hot-ls` finds `Urho3D.Object` and the other engine types.
 - The scripts in `Project/Data/Scripts` and the prelude file.
 - The prelude `Rbfx.prelude.hot`. `hot-ls` gives it to each script, as the `ScriptSystem` does at run time. Thus it knows `ReflectedObject` and the engine handle rules.
+- The suffix `.prelude.hot` of the user preludes (`PRELUDE_SUFFIX`). At each analysis, `hot-ls` finds these files in `Project/Data/Scripts` and gives them after the library prelude. A new user prelude works at once, with no new configure step.
 
 Run the configure step one time before you open the scripts. `hot-ls` finds the file in the workspace folder.
 Open the repository root as the workspace folder.
@@ -96,6 +97,37 @@ Give the class a native base that derives from `RefCounted` instead.
 `Project/Data/Scripts/Spawner.hot` is the sample.
 The smoke test checks that its weak handle gives null after the node is removed.
 It also checks that the `eastl.vector` and the `std.vector` of Spawner hold the same values.
+
+### Preludes: library defaults and user overrides
+
+The library prelude sets the default rules. A user prelude extends them or overrides them.
+A user prelude is a file `*.prelude.hot` in the script folder or in a subfolder.
+The `ScriptSystem` finds the user preludes through the script source: the `Scripts` resource folder in the game, the disk folder in the editor.
+It gives them to the backend after the library prelude, sorted by path.
+It does not compile them as scripts.
+
+A stub in a later prelude with the key of an earlier stub merges into the earlier rule:
+
+- `value`, `handle` and `intrusive` are the storage. A stated storage replaces the full earlier storage.
+- `weak_handle` and `default_handle` replace the earlier value. A new storage without a handle removes the weak handle. A new handle needs a new `weak_handle`, or `weak_handle("")`.
+- `cpp_prelude` text adds up: the later text comes after the earlier text.
+- `cpp_overrides` names add up.
+- `native`, `self` and `checked_index` add up. A later stub cannot remove them.
+- An empty string removes an inherited value, for example `weak_handle("")` or `cpp_prelude("")`.
+- A merged rule that is not valid, for example `value` with an inherited `weak_handle`, is an error at the later stub.
+- A later prelude overrides `std` and `array` of an earlier prelude. `lib` adds up.
+- A stub in a script merges in the same way, for that script only.
+
+The key is the form and the name of the stub: `class Urho3D.RefCounted;`, `class : Urho3D.Object;`, `class *;`, `struct *;` or a pattern.
+A refining exact stub still needs `native`.
+
+`Project/Data/Scripts/Game.prelude.hot` is the sample.
+It declares the script attribute `Tunable`, which `Spawner.hot` uses.
+It adds one `cpp_prelude` line to the library rule of `class : Urho3D.Object`. The `URHO3D_OBJECT` line of the library stays.
+
+A change, an addition or a removal of a user prelude compiles all scripts again in the background.
+The old code of a script runs until its new compile succeeds.
+A broken prelude gives a compile error for each script. The old code stays, and the Scripts tab and the log show the error.
 
 ### Reflected script types
 
@@ -229,5 +261,6 @@ The player needs `ResourceRoot.ini` in its directory or in a parent directory.
     cp -r Project/Data /tmp/script-data
     cmake-build/bin/Rbfx.Script.SmokeTest cmake-build/bin/libPlugin.Rbfx.Script.so /tmp/script-data
 
-Give an absolute data folder. The test changes `Scripts/Rotator2.cpp` in the copy and restores it.
+Give an absolute data folder. The test changes `Scripts/Rotator2.cpp` and `Scripts/Game.prelude.hot` in the copy and restores them.
+It also adds and removes a second user prelude. It checks the merge of the preludes and the compile after a prelude change.
 The test does not link `Rbfx.Script.Core`. It uses the `ScriptSystem` of the plugin.
