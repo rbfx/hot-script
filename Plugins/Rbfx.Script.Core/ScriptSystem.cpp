@@ -3,6 +3,7 @@
 
 #include "Rbfx.Script.Core/ScriptSystem.h"
 
+#include "Rbfx.Script.Core/ScriptReflection.h"
 #include "Rbfx.Script.Core/ScriptSourceFileSystem.h"
 
 #include <Urho3D/Core/CoreEvents.h>
@@ -49,7 +50,7 @@ ea::string FormatResult(const hot::ReloadResult& result)
 }
 
 // The script attribute that registers a script class with the engine (see the prelude).
-const char* const ReflectedObjectAttribute = "ReflectedObject";
+const char* const ReflectedObjectAttribute = RBFX_SCRIPT_REFLECTED_ATTRIBUTE;
 
 // The engine type name of the primary native base. Hot++ gives the C++ names of the native bases
 // with ", " between them, for example "Urho3D::LogicComponent, IFoo". The result is "LogicComponent".

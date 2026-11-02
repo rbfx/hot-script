@@ -13,4 +13,5 @@
 // "[ReflectedObject] class C : Urho3D.LogicComponent { }" registers the script class C with the
 // engine after each load: Context::CreateObject and Node::CreateComponent then make C by its name.
 // The primary native base must be an engine type, for example a class that derives from Object.
+// A .cpp script writes RBFX_SCRIPT_REFLECTED after "class" (Rbfx.Script.Core/ScriptReflection.h).
 [attribute] class ReflectedObject;

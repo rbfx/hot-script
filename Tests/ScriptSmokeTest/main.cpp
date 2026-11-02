@@ -152,37 +152,48 @@ int main(int argc, char** argv)
         else
             result = Fail("CreateObject(Spawner) returned null");
 
-        // Reflected script types: Rotator has the attribute ReflectedObject, so the engine knows it.
-        // The engine factory makes it by its name. Spawner has no attribute: the engine does not know it.
-        if (ObjectReflection* reflection = context->GetReflection(StringHash("Rotator")))
+        // Reflected script types: Rotator and Spawner have the attribute ReflectedObject, and Rotator2
+        // (a .cpp script) has RBFX_SCRIPT_REFLECTED. So the engine knows them and makes them by name.
+        // Counter has no attribute: the engine does not know it.
+        const auto& categories = context->GetObjectCategories();
+        const auto user = categories.find(Category_User.c_str());
+        for (const char* className : {"Rotator", "Rotator2", "Spawner"})
         {
+            const StringHash type(className);
+            ObjectReflection* reflection = context->GetReflection(type);
+            if (!reflection)
+            {
+                std::fprintf(stderr, "SmokeTest: %s is not registered with the engine\n", className);
+                result = Fail("a tagged script class is not registered");
+                continue;
+            }
             const TypeInfo* base = reflection->GetTypeInfo()->GetBaseTypeInfo();
             if (!base || base->GetType() != LogicComponent::GetTypeStatic())
-                result = Fail("the base of the reflected type Rotator is not LogicComponent");
+                result = Fail("the base of a reflected type is not LogicComponent");
             // The editor menus list the types of the "Component/" categories that have a factory.
-            const auto& categories = context->GetObjectCategories();
-            const auto user = categories.find(Category_User.c_str());
             if (!reflection->HasObjectFactory() || reflection->GetCategory() != Category_User || user == categories.end()
-                || ea::find(user->second.begin(), user->second.end(), StringHash("Rotator")) == user->second.end())
-                result = Fail("the reflected type Rotator is not in the category Component/User");
-            if (!context->CreateObject(StringHash("Rotator")))
-                result = Fail("Context::CreateObject(Rotator) returned null");
-            Node* node = scene->CreateChild("ReflectedRotator");
-            auto* component = dynamic_cast<LogicComponent*>(node->CreateComponent(StringHash("Rotator")));
-            if (!component)
-                result = Fail("Node::CreateComponent(Rotator) did not make a script component");
-            else
-            {
-                component->Update(0.5f);
-                std::printf("SmokeTest: reflected Rotator yaw after 0.5 s = %.1f\n", YawOf(node));
-                if (YawOf(node) < 40.0f || YawOf(node) > 50.0f)
-                    result = Fail("unexpected yaw of the reflected Rotator");
-            }
+                || ea::find(user->second.begin(), user->second.end(), type) == user->second.end())
+                result = Fail("a reflected type is not in the category Component/User");
+            if (!context->CreateObject(type))
+                result = Fail("Context::CreateObject returned null for a reflected type");
+            std::printf("SmokeTest: %s is registered with the engine\n", className);
         }
-        else
-            result = Fail("Rotator is not registered with the engine");
-        if (context->GetReflection(StringHash("Spawner")))
-            result = Fail("Spawner is registered with the engine, but it has no attribute");
+        for (const char* className : {"Rotator", "Rotator2"})
+        {
+            Node* node = scene->CreateChild(Format("Reflected{}", className));
+            auto* component = dynamic_cast<LogicComponent*>(node->CreateComponent(StringHash(className)));
+            if (!component)
+            {
+                result = Fail("Node::CreateComponent did not make a script component");
+                continue;
+            }
+            component->Update(0.5f);
+            std::printf("SmokeTest: reflected %s yaw after 0.5 s = %.1f\n", className, YawOf(node));
+            if (YawOf(node) < 40.0f || YawOf(node) > 50.0f)
+                result = Fail("unexpected yaw of a reflected component");
+        }
+        if (context->GetReflection(StringHash("Counter")))
+            result = Fail("Counter is registered with the engine, but it has no attribute");
 
         // Hot reload: change the speed of Rotator2 and reload. The live component keeps its node.
         Node* node2 = scene->GetChild("Rotator2");

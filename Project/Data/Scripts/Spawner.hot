@@ -11,6 +11,8 @@ class Counter {
     int count = 0;
 }
 
+// "[ReflectedObject]" registers Spawner with the engine. Counter has no tag: the engine does not know it.
+[ReflectedObject]
 class Spawner : Urho3D.LogicComponent {
     Urho3D.Node child = null;
     [weak]

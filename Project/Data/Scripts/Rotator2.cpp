@@ -4,8 +4,10 @@
 #include <Urho3D/Core/Context.h>
 #include <Urho3D/Scene/LogicComponent.h>
 #include <Urho3D/Scene/Node.h>
+#include <Rbfx.Script.Core/ScriptReflection.h>
 
-class Rotator2 : public Urho3D::LogicComponent
+// RBFX_SCRIPT_REFLECTED registers Rotator2 with the engine, the same as "[ReflectedObject]" in Rotator.hot.
+class RBFX_SCRIPT_REFLECTED Rotator2 : public Urho3D::LogicComponent
 {
 public:
     Rotator2() : Urho3D::LogicComponent(Urho3D::Context::GetInstance()) {}

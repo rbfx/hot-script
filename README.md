@@ -71,12 +71,24 @@ The smoke test checks that its weak handle gives null after the node is removed.
 ### Reflected script types
 
 The prelude declares the Hot++ script attribute `ReflectedObject`.
-Put it on a script class to register the class with the engine:
+Put it on a `.hot` script class to register the class with the engine:
 
 ```hot
 [ReflectedObject]
 class Rotator : Urho3D.LogicComponent { ... }
 ```
+
+A `.cpp` script cannot use the `.hot` attribute syntax.
+Include `Rbfx.Script.Core/ScriptReflection.h` and write `RBFX_SCRIPT_REFLECTED` after `class`:
+
+```cpp
+#include <Rbfx.Script.Core/ScriptReflection.h>
+
+class RBFX_SCRIPT_REFLECTED Rotator2 : public Urho3D::LogicComponent { ... };
+```
+
+The macro is the Hot++ macro `HOT_ATTRIBUTE("ReflectedObject")`, a clang annotation.
+The two forms give the same result.
 
 - After each script load, the `ScriptSystem` registers each new class with this attribute.
 - The engine factory makes the class by its name: `Context::CreateObject` and `Node::CreateComponent`.
@@ -92,7 +104,8 @@ Limits (TODO comments in `ScriptSystem::RegisterReflectedTypes`):
 - A plugin unload and a removed class do not unregister the type.
 - Script fields are not engine attributes yet.
 
-`Project/Data/Scripts/Rotator.hot` is the sample. The smoke test makes it by its name.
+`Rotator.hot`, `Spawner.hot` and `Rotator2.cpp` in `Project/Data/Scripts` are the samples.
+The smoke test checks that the engine knows them and makes them by name.
 
 ### Hot reload
 
