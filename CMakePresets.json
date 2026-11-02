@@ -1,0 +1,30 @@
+{
+    "version": 3,
+    "cmakeMinimumRequired": {
+        "major": 3,
+        "minor": 21,
+        "patch": 0
+    },
+    "configurePresets": [
+        {
+            "name": "dll",
+            "binaryDir": "${sourceDir}/cmake-build/${presetName}",
+            "installDir": "${sourceDir}/cmake-build/${presetName}/install",
+            "cacheVariables": {
+                "BUILD_SHARED_LIBS": "ON",
+                "CMAKE_CONFIGURATION_TYPES": "Debug;RelWithDebInfo",
+                "CMAKE_POLICY_VERSION_MINIMUM": "3.5"
+            }
+        },
+        {
+            "name": "lib",
+            "binaryDir": "${sourceDir}/cmake-build/${presetName}",
+            "installDir": "${sourceDir}/cmake-build/${presetName}/install",
+            "cacheVariables": {
+                "BUILD_SHARED_LIBS": "OFF",
+                "CMAKE_CONFIGURATION_TYPES": "Debug;RelWithDebInfo",
+                "CMAKE_POLICY_VERSION_MINIMUM": "3.5"
+            }
+        }
+    ]
+}
