@@ -36,11 +36,47 @@ if(NOT EXISTS "${CMAKE_CURRENT_SOURCE_DIR}/hotpp/CMakeLists.txt")
     message(FATAL_ERROR
         "Missing hotpp/CMakeLists.txt. Run: git submodule update --init --recursive")
 endif()
+# The Hot++ translator uses libclang, and libclang needs the Clang resource folder (stddef.h and
+# the other compiler headers). Hot++ asks the compiler of the build for the folder, but only a
+# Clang build can answer. For a GCC build, ask the clang++ of the system.
+# The backend also gives the script compiler the flag -resource-dir, and GCC does not know it.
+# So a GCC build compiles the scripts with clang++. It uses the same C++ library as GCC.
+if(NOT CMAKE_CXX_COMPILER_ID MATCHES "Clang" AND NOT MSVC)
+    find_program(RBFX_SCRIPT_CLANGXX NAMES clang++)
+    if(RBFX_SCRIPT_CLANGXX)
+        if(NOT HOT_CLANG_RESOURCE_DIR)
+            execute_process(COMMAND ${RBFX_SCRIPT_CLANGXX} -print-resource-dir
+                            OUTPUT_VARIABLE _rbfx_script_resource_dir OUTPUT_STRIP_TRAILING_WHITESPACE)
+            set(HOT_CLANG_RESOURCE_DIR "${_rbfx_script_resource_dir}" CACHE PATH "The Clang resource directory")
+        endif()
+        if(NOT HOT_SCRIPT_COMPILER OR HOT_SCRIPT_COMPILER STREQUAL CMAKE_CXX_COMPILER)
+            set(HOT_SCRIPT_COMPILER "${RBFX_SCRIPT_CLANGXX}" CACHE STRING
+                "The compiler of the script modules at run time" FORCE)
+        endif()
+    else()
+        message(WARNING "clang++ is not found. The run-time compile of the scripts needs it.")
+    endif()
+endif()
+
+# The plugins are shared libraries when the engine is shared. They link the Hot++ static
+# libraries, so these libraries need position independent code.
+if(BUILD_SHARED_LIBS)
+    set(CMAKE_POSITION_INDEPENDENT_CODE ON)
+endif()
 add_subdirectory(hotpp)
+
+# Shared script core. The game plugin and the editor plugin link it.
+add_subdirectory(Plugins/Rbfx.Script.Core)
 
 # Game plugin.
 if(EXISTS "${CMAKE_CURRENT_SOURCE_DIR}/Plugins/Rbfx.Script/CMakeLists.txt")
     add_subdirectory(Plugins/Rbfx.Script)
+endif()
+
+# End-to-end test of the game plugin.
+option(RBFX_SCRIPT_BUILD_TESTS "Build the end-to-end test of the game plugin" OFF)
+if(RBFX_SCRIPT_BUILD_TESTS)
+    add_subdirectory(Tests/ScriptSmokeTest)
 endif()
 
 # Editor plugin.
