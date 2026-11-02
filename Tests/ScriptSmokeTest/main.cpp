@@ -8,6 +8,9 @@
 //   Rbfx.Script.SmokeTest <plugin-library> <data-dir>
 // The test input is Project/Data, the data of the editor demo. Give a writable copy of it: the test changes
 // Scripts/Rotator2.cpp and restores it.
+// The background reload part checks that the old code runs during a compile of a changed script, that the
+// new code runs after the swap, and that a compile error keeps the old code. A compile takes seconds,
+// so many frames run during it.
 
 #include <Rbfx.Script.Core/ScriptSystem.h>
 
@@ -27,10 +30,13 @@
 
 #include <dlfcn.h>
 
+#include <chrono>
 #include <cstdio>
+#include <filesystem>
 #include <fstream>
 #include <sstream>
 #include <string>
+#include <thread>
 
 using namespace Urho3D;
 
@@ -285,6 +291,99 @@ int main(int argc, char** argv)
                 result = Fail("a script component does not report its registered type after a reload");
             if (SceneRoundTrip(context, "Rotator2") != "Rotator2")
                 result = Fail("a scene does not keep the type of a script component after a reload");
+        }
+
+        // Background reload: the poll finds the change and compiles on a worker thread. The old code runs
+        // until the compile ends. At that time the live code of Rotator2 is "-speed" (-45 degrees in 0.5 s).
+        if (rotator2 && !original.empty())
+        {
+            namespace stdfs = std::filesystem;
+            system->SetAutoReload(true);
+            system->SetPollInterval(0);
+            int stampOffset = 0;
+            // The stamp has a resolution of one second, so each write sets a new modification time.
+            const auto writeScript = [&](const char* replacement)
+            {
+                std::string text = original;
+                const size_t pos = text.find("speed * timeStep");
+                if (pos != std::string::npos)
+                    text.replace(pos, 16, replacement);
+                WriteFile(path2, text);
+                stampOffset += 10;
+                std::error_code ec;
+                stdfs::last_write_time(path2, stdfs::file_time_type::clock::now() + std::chrono::seconds(stampOffset), ec);
+            };
+            const auto yawOfOneUpdate = [&]
+            {
+                node2->SetRotation(Quaternion::IDENTITY);
+                rotator2->Update(0.5f);
+                return YawOf(node2);
+            };
+            const auto near = [](float value, float expected) { return value > expected - 5.0f && value < expected + 5.0f; };
+            // Run frames while the compile runs. Each frame must run the code with the expected yaw.
+            // A second text replaces the first one during the compile, if it is not null.
+            const auto runFramesDuringCompile = [&](float expectedYaw, const char* secondText)
+            {
+                system->Update(); // the poll queues the script and starts the compile
+                if (!system->IsCompiling())
+                    return Fail("a changed script does not start a background compile");
+                int frames = 0;
+                const auto start = std::chrono::steady_clock::now();
+                while (system->IsCompiling())
+                {
+                    if (!near(yawOfOneUpdate(), expectedYaw))
+                        return Fail("the old code does not run during the background compile");
+                    ++frames;
+                    if (frames == 1 && secondText)
+                        writeScript(secondText);
+                    if (std::chrono::steady_clock::now() - start > std::chrono::minutes(3))
+                        return Fail("the background compile does not end");
+                    std::this_thread::sleep_for(std::chrono::milliseconds(10));
+                    system->Update();
+                }
+                std::printf("SmokeTest: %d frames ran the old code during the background compile\n", frames);
+                return frames > 1 ? 0 : Fail("no frame ran during the background compile");
+            };
+            const auto rotator2Error = [&]
+            {
+                for (const ScriptStatus& status : system->GetScriptStatus())
+                {
+                    if (status.name_ == "Scripts/Rotator2.cpp")
+                        return status.error_;
+                }
+                return ea::string("no status");
+            };
+
+            // Two saves in a row: the result of the first text is stale, and only the second text goes live.
+            const unsigned generation0 = system->GetActiveGeneration();
+            writeScript("3.0f * speed * timeStep");
+            if (runFramesDuringCompile(-45.0f, "2.0f * speed * timeStep") != 0)
+                result = 1;
+            const float newYaw = yawOfOneUpdate();
+            std::printf("SmokeTest: Rotator2 yaw after the background reload = %.1f\n", newYaw);
+            if (!near(newYaw, 90.0f))
+                result = Fail("the new code does not run after the background reload");
+            if (system->GetActiveGeneration() != generation0 + 1)
+                result = Fail("the background reload did not commit exactly one generation");
+            if (node2->GetDerivedComponent<LogicComponent>() != rotator2 || !ReportsRegisteredType(context, rotator2, "Rotator2"))
+                result = Fail("the script component does not keep its object and type after the background reload");
+            if (!rotator2Error().empty())
+                result = Fail("the background reload reports an error");
+
+            // A compile error keeps the old code.
+            const unsigned generation1 = system->GetActiveGeneration();
+            writeScript("speed * timeStep +");
+            if (runFramesDuringCompile(90.0f, nullptr) != 0)
+                result = 1;
+            if (!near(yawOfOneUpdate(), 90.0f) || system->GetActiveGeneration() != generation1)
+                result = Fail("a compile error does not keep the old code");
+            if (rotator2Error().empty())
+                result = Fail("a compile error is not in the script status");
+            // The plugin unloads during a compile of the original text. The destructor waits for the compile.
+            writeScript("speed * timeStep");
+            system->Update();
+            if (!system->IsCompiling())
+                result = Fail("the restored script does not start a background compile");
         }
 
         scene.Reset();

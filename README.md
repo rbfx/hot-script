@@ -52,7 +52,8 @@ Change `cmake-build/dll` to your build folder.
   So a `using` line or an `#include` between scripts also reads through the source.
 - `ScriptSystem`: an engine subsystem. It owns the Hot++ backend and the Hot++ loader.
   Each script is one Hot++ unit.
-  `LoadScript`, `ReloadScript` and `LoadAllScripts` compile a script and commit it at once.
+  `LoadScript`, `ReloadScript` and `LoadAllScripts` compile a script on the calling thread and commit it at once.
+  They wait for a background compile first.
   `CreateObject<T>(className)` makes an object of a script class with the native base `T`.
   Errors go to the log with `URHO3D_LOGERROR`.
 
@@ -65,6 +66,7 @@ The plugin loads all these scripts in `Load`.
 The editor plugin has the source `DiskScriptSource`: one folder on the disk, without the ResourceCache.
 It adds the "Scripts" tab to the editor.
 The tab shows the script folder, the scripts, their classes, the generation and the compile errors.
+It shows "compiling..." next to a script while its background compile runs.
 The Reload button compiles all scripts of the folder again.
 The default folder is `<project data folder>/Scripts`.
 Type a folder relative to the project folder and click "Apply Folder" to change it.
@@ -157,7 +159,14 @@ The smoke test checks that the engine knows them and makes them by name.
 The subsystem polls the stamp of each loaded script every 500 ms, in the `E_ENDFRAME` handler.
 The game source uses the modification time of the resolved file on the disk.
 A file in a package has the stamp zero and does not reload.
-A changed script compiles again, and the new code goes live at the end of the frame.
+A changed script compiles again on a worker thread, so the frames do not stop.
+The objects keep the old code and run it during the compile.
+At the end of the first frame after the compile, the new code goes live. The objects keep their fields.
+New script classes with the attribute `ReflectedObject` become engine types at that time.
+A compile error keeps the old code. The error goes to the log and to the "Scripts" tab.
+One compile runs at a time. No commit runs during a compile.
+A script that changes again during its compile compiles again with the newest text. The old result is dropped.
+The destructor of the subsystem waits for a running compile, also at a plugin reload.
 A changed header does not start a reload. Call `ReloadScript` for it.
 
 ### Rules

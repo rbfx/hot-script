@@ -40,6 +40,8 @@ struct ScriptStatus
     ea::vector<ea::string> classes_;
     /// The stamp of the source file at the last compile.
     unsigned long long stamp_{};
+    /// True while a new text of the script compiles or waits for a compile. The old code stays live.
+    bool compiling_{};
 };
 
 /// The script subsystem. It owns the Hot++ backend and the Hot++ loader.
@@ -49,15 +51,20 @@ struct ScriptStatus
 /// and Loader::commit_pending.
 ///
 /// Threads and safe points: call LoadScript, ReloadScript and LoadAllScripts on the main thread,
-/// and never from script code, because they commit the new code at once. The automatic reload
-/// runs in the handler of E_ENDFRAME. No script code runs at that time.
+/// and never from script code, because they compile on the calling thread and commit the new code
+/// at once. They wait for a background compile first. The automatic reload commits in the handler
+/// of E_ENDFRAME. No script code runs at that time.
 ///
 /// Hot reload: the subsystem polls GetModificationStamp of each loaded script. The interval is
-/// SetPollInterval. A changed stamp compiles the script again and commits it at the end of the frame.
+/// SetPollInterval. A changed stamp starts a compile on a worker thread. The old code stays live
+/// and runs during the compile. The handler of E_ENDFRAME then commits the new code. A failed
+/// compile keeps the old code. One compile runs at a time, and no commit runs during it, so each
+/// compile reads the current slot state. A script that changes again during its compile compiles
+/// again with the newest text, and the subsystem drops the old result.
 /// A change in a header that a script includes does not start a reload. Call ReloadScript for it.
 ///
-/// Lifetime: release all script objects before the subsystem is destroyed. The destructor
-/// unloads the script code, and a live script object then has no code.
+/// Lifetime: release all script objects before the subsystem is destroyed. The destructor waits
+/// for a background compile. Then it unloads the script code, and a live script object then has no code.
 ///
 /// One runtime: the process must have one Hot++ runtime state. With a shared engine the core is a
 /// shared library, and all plugins use it. Each plugin registers a ScriptSystem only when the
@@ -117,6 +124,8 @@ public:
     virtual ea::vector<ScriptStatus> GetScriptStatus() const;
     /// Return the active Hot++ generation. Zero before the first load.
     virtual unsigned GetActiveGeneration() const;
+    /// Return true while a background compile runs or waits.
+    virtual bool IsCompiling() const;
     /// Remove each script type that this subsystem registered with the engine.
     /// The destructor calls it. Thus a new subsystem, for example of a reloaded plugin, can register the types again.
     /// The engine must not hold objects of these types.
@@ -145,11 +154,21 @@ public:
     const ea::string& GetLastError() const { return lastError_; }
 
 private:
+    struct CompileJob;
+
     /// Make the backend and the loader. Return false on an error.
     bool EnsureBackend();
-    /// Compile one script and make it live. The function commits at once.
+    /// Compile one script on this thread and make it live. The function commits at once.
     bool CompileAndApply(const ea::string& name);
-    /// Poll the stamps and reload the changed scripts.
+    /// Read the text of a script into a new job. Return null on an error.
+    std::unique_ptr<CompileJob> PrepareCompile(const ea::string& name);
+    /// Commit the result of a compile. Return false on an error. The old code then stays.
+    bool ApplyCompile(CompileJob& job);
+    /// Start the next background compile when no compile runs.
+    void StartNextCompile();
+    /// Apply the background compile when it is done. With "wait", wait for it first.
+    void FinishCompile(bool wait);
+    /// Poll the stamps and queue the changed scripts for a background compile.
     void PollScripts();
     /// Register each live script class with the attribute ReflectedObject with the engine.
     void RegisterReflectedTypes();
@@ -174,6 +193,10 @@ private:
     unsigned pollInterval_{500};
     Timer pollTimer_;
     ea::string lastError_;
+    /// The background compile, or null. Only one compile runs at a time.
+    std::unique_ptr<CompileJob> job_;
+    /// The scripts that wait for a background compile, in order. A name is in the queue one time only.
+    ea::vector<ea::string> compileQueue_;
     /// The handle that makes the symbols of this module global (see ScriptSystem.cpp).
     void* selfHandle_{};
 };

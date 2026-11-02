@@ -148,8 +148,8 @@ void ScriptsTab::RenderContent()
         const bool failed = !script.error_.empty();
         if (failed)
             ui::PushStyleColor(ImGuiCol_Text, ImVec4(1.0f, 0.4f, 0.4f, 1.0f));
-        ui::Text("%s  %s  generation %u", script.name_.c_str(), script.loaded_ ? "loaded" : "not loaded",
-            script.generation_);
+        ui::Text("%s  %s  generation %u%s", script.name_.c_str(), script.loaded_ ? "loaded" : "not loaded",
+            script.generation_, script.compiling_ ? "  compiling..." : "");
         if (failed)
             ui::PopStyleColor();
         ui::Indent();

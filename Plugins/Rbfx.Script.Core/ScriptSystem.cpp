@@ -20,7 +20,9 @@
 #include <hot/runtime/records.h>
 #include <hot/runtime/threads.h>
 
+#include <atomic>
 #include <exception>
+#include <thread>
 
 #if !defined(_WIN32)
     #include <dlfcn.h>
@@ -94,6 +96,20 @@ void* PromoteOwnSymbols()
 
 } // namespace
 
+/// One compile of one script. The main thread reads the text and starts the job. The worker thread
+/// runs only Backend::load. The main thread then applies the result.
+struct ScriptSystem::CompileJob
+{
+    ea::string name_;
+    /// The stamp of the source before the read of the text.
+    unsigned long long stamp_{};
+    hot::ScriptSource script_;
+    uint32_t generation_{};
+    hot::LoadResult built_;
+    std::thread thread_;
+    std::atomic<bool> done_{false};
+};
+
 ScriptSystem::ScriptSystem(Context* context, std::shared_ptr<IScriptSource> source)
     : Object(context)
     , source_(std::move(source))
@@ -104,6 +120,12 @@ ScriptSystem::ScriptSystem(Context* context, std::shared_ptr<IScriptSource> sour
 
 ScriptSystem::~ScriptSystem()
 {
+    // The worker thread runs code of this module and uses the backend. Wait for it before the
+    // backend goes and before the library unloads (plugin reload). Drop its result.
+    if (job_ && job_->thread_.joinable())
+        job_->thread_.join();
+    job_.reset();
+    compileQueue_.clear();
     // The engine factory of a script type points to this subsystem and maybe into a library that unloads.
     UnregisterReflectedTypes();
     // The loader unloads the script code. It goes before the backend (see the header).
@@ -179,30 +201,51 @@ bool ScriptSystem::EnsureBackend()
 
 bool ScriptSystem::CompileAndApply(const ea::string& name)
 {
-    if (!EnsureBackend())
+    // A sync compile does not overlap a background compile: they share the backend and the slot state.
+    FinishCompile(true);
+    compileQueue_.erase(ea::remove(compileQueue_.begin(), compileQueue_.end(), name), compileQueue_.end());
+    std::unique_ptr<CompileJob> job = PrepareCompile(name);
+    if (!job)
         return false;
+    job->built_ = backend_->load(job->script_, job->generation_);
+    return ApplyCompile(*job);
+}
+
+std::unique_ptr<ScriptSystem::CompileJob> ScriptSystem::PrepareCompile(const ea::string& name)
+{
+    if (!EnsureBackend())
+        return nullptr;
 
     // Read the stamp before the text. A change between the two reads then starts one more reload.
-    const unsigned long long stamp = source_->GetModificationStamp(name);
-    ea::string text;
+    auto job = std::make_unique<CompileJob>();
+    job->name_ = name;
+    job->stamp_ = source_->GetModificationStamp(name);
     ScriptStatus& status = scripts_[name];
     status.name_ = name;
-    status.stamp_ = stamp;
+    // The stamp of the text that compiles. The poll then does not queue the same text again.
+    status.stamp_ = job->stamp_;
+    ea::string text;
     if (!source_->ReadText(name, text))
     {
         ReportError(Format("cannot read the script '{}' from {}", name, source_->GetDescription()));
         status.error_ = lastError_;
-        return false;
+        return nullptr;
     }
+    job->script_.name = ScriptSourceFileSystem::ToBackendPath(name);
+    job->script_.text.assign(text.c_str(), text.size());
+    // The generation must be newer than the active generation of the process. No commit runs
+    // during a compile, so the generation is still free when the compile ends.
+    job->generation_ = hot::active_generation + 1;
+    return job;
+}
 
-    hot::ScriptSource script;
-    script.name = ScriptSourceFileSystem::ToBackendPath(name);
-    script.text.assign(text.c_str(), text.size());
-
-    // The generation must be newer than the active generation of the process.
-    hot::LoadResult built = backend_->load(script, hot::active_generation + 1);
+bool ScriptSystem::ApplyCompile(CompileJob& job)
+{
+    const ea::string& name = job.name_;
+    ScriptStatus& status = scripts_[name];
+    hot::LoadResult& built = job.built_;
     if (built.module)
-        built.module->unit = script.name;
+        built.module->unit = job.script_.name;
 
     hot::ReloadResult result;
     // The first module of the loader goes through load(). Each later module is a reload.
@@ -245,13 +288,63 @@ bool ScriptSystem::CompileAndApply(const ea::string& name)
     }
     lastError_.clear();
     URHO3D_LOGINFO("ScriptSystem: loaded '{}' (generation {})", name, hot::active_generation);
+    // New script classes become engine types at the swap.
     RegisterReflectedTypes();
     return true;
 }
 
+void ScriptSystem::StartNextCompile()
+{
+    while (!job_ && !compileQueue_.empty())
+    {
+        const ea::string name = compileQueue_.front();
+        compileQueue_.erase(compileQueue_.begin());
+        std::unique_ptr<CompileJob> job = PrepareCompile(name);
+        if (!job)
+            continue;
+        URHO3D_LOGINFO("ScriptSystem: compiling '{}'; the old code runs until the compile ends", name);
+        CompileJob* raw = job.get();
+        hot::Backend* backend = backend_.get();
+        // The worker uses only the job and the backend. The backend reads the source through
+        // its thread safe file system.
+        job->thread_ = std::thread([raw, backend]
+        {
+            try
+            {
+                raw->built_ = backend->load(raw->script_, raw->generation_);
+            }
+            catch (const std::exception& error)
+            {
+                raw->built_ = hot::LoadResult{};
+                raw->built_.error = error.what();
+            }
+            raw->done_ = true;
+        });
+        job_ = std::move(job);
+    }
+}
+
+void ScriptSystem::FinishCompile(bool wait)
+{
+    if (!job_ || (!wait && !job_->done_))
+        return;
+    job_->thread_.join();
+    std::unique_ptr<CompileJob> job = std::move(job_);
+    // A newer text makes the result stale. Drop it and compile the newest text.
+    const unsigned long long current = source_->GetModificationStamp(job->name_);
+    if (current != 0 && current != job->stamp_)
+    {
+        URHO3D_LOGINFO("ScriptSystem: '{}' changed during the compile, compiling again", job->name_);
+        if (ea::find(compileQueue_.begin(), compileQueue_.end(), job->name_) == compileQueue_.end())
+            compileQueue_.insert(compileQueue_.begin(), job->name_);
+        return;
+    }
+    // On an error the old code stays. The stamp of the failed text prevents a compile at each poll.
+    ApplyCompile(*job);
+}
+
 void ScriptSystem::RegisterReflectedTypes()
 {
-    // TODO: Register new classes on reload also when Update commits a pending reload.
     // TODO: Unregister removed classes. The engine can still hold objects of them.
     // TODO: Register the engine attributes of new fields on reload.
     // TODO: Register the fields or properties with an [Attribute] tag as engine attributes.
@@ -401,9 +494,12 @@ void ScriptSystem::PollScripts()
     }
     for (const ea::string& name : changed)
     {
+        // The running compile of the script finds the change when it ends.
+        if ((job_ && job_->name_ == name)
+            || ea::find(compileQueue_.begin(), compileQueue_.end(), name) != compileQueue_.end())
+            continue;
         URHO3D_LOGINFO("ScriptSystem: '{}' changed, reloading", name);
-        // On an error the old code stays. The stamp of the failed text prevents a compile at each poll.
-        CompileAndApply(name);
+        compileQueue_.push_back(name);
     }
 }
 
@@ -411,7 +507,11 @@ ea::vector<ScriptStatus> ScriptSystem::GetScriptStatus() const
 {
     ea::vector<ScriptStatus> result;
     for (const auto& [name, status] : scripts_)
+    {
         result.push_back(status);
+        result.back().compiling_ = (job_ && job_->name_ == name)
+            || ea::find(compileQueue_.begin(), compileQueue_.end(), name) != compileQueue_.end();
+    }
     ea::sort(result.begin(), result.end(),
         [](const ScriptStatus& lhs, const ScriptStatus& rhs) { return lhs.name_ < rhs.name_; });
     return result;
@@ -420,6 +520,11 @@ ea::vector<ScriptStatus> ScriptSystem::GetScriptStatus() const
 unsigned ScriptSystem::GetActiveGeneration() const
 {
     return hot::active_generation;
+}
+
+bool ScriptSystem::IsCompiling() const
+{
+    return job_ || !compileQueue_.empty();
 }
 
 void ScriptSystem::Update()
@@ -431,13 +536,17 @@ void ScriptSystem::Update()
         pollTimer_.Reset();
         PollScripts();
     }
-    // A reload that an earlier call left pending goes live now.
-    if (loader_->reload_pending())
+    // A finished background compile goes live now, at the end of the frame.
+    FinishCompile(false);
+    // A reload that an earlier call left pending goes live now. A commit does not overlap a compile.
+    if (!job_ && loader_->reload_pending())
     {
         const hot::ReloadResult result = loader_->commit_pending();
         if (result.status != hot::ReloadStatus::Applied)
             ReportError(Format("cannot commit a pending reload: {}", FormatResult(result)));
     }
+    // The next compile starts after the commit, so it reads the new slot state.
+    StartNextCompile();
     loader_->frame_boundary();
 }
 
