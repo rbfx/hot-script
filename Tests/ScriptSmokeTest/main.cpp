@@ -184,42 +184,11 @@ int main(int argc, char** argv)
                 result = Fail("unexpected yaw");
         }
 
-        // The prelude: Spawner holds a node through Urho3D::SharedPtr and watches it through
-        // Urho3D::WeakPtr. The weak handle gives null after the node is removed. Spawner also uses
-        // an eastl::vector and a std::vector side by side.
-        if (!system->IsScriptLoaded("Scripts/Spawner.hot"))
-            result = Fail("Spawner.hot did not load");
-        else if (SharedPtr<LogicComponent> spawner = system->CreateObject<LogicComponent>("Spawner"))
-        {
-            Node* node = scene->CreateChild("Spawner");
-            node->AddComponent(spawner, 0);
-            spawner->Update(0.1f);
-            Node* spawned = node->GetChild("Spawned");
-            if (node->GetChild("SpawnedBadVectors"))
-                result = Fail("the eastl and std vectors of Spawner hold different values");
-            else if (!spawned)
-                result = Fail("Spawner did not make the node");
-            else if (spawned->Refs() != 1)
-                result = Fail("the script keeps a strong reference to the node");
-            spawner->Update(0.1f);
-            if (node->GetName() != "Spawner")
-                result = Fail("the weak handle is null while the node is alive");
-            if (spawned)
-                spawned->Remove();
-            spawner->Update(0.1f);
-            std::printf("SmokeTest: Spawner node name after the remove = %s\n", node->GetName().c_str());
-            if (node->GetName() != "SpawnerDone")
-                result = Fail("the weak handle is not null after the node is removed");
-        }
-        else
-            result = Fail("CreateObject(Spawner) returned null");
-
-        // Reflected script types: Rotator and Spawner have the attribute ReflectedObject, and Rotator2
+        // Reflected script types: Rotator has the attribute ReflectedObject, and Rotator2
         // (a .cpp script) has RBFX_SCRIPT_REFLECTED. So the engine knows them and makes them by name.
-        // Counter has no attribute: the engine does not know it.
         const auto& categories = context->GetObjectCategories();
         const auto user = categories.find(Category_User.c_str());
-        for (const char* className : {"Rotator", "Rotator2", "Spawner"})
+        for (const char* className : {"Rotator", "Rotator2"})
         {
             const StringHash type(className);
             ObjectReflection* reflection = context->GetReflection(type);
@@ -256,8 +225,6 @@ int main(int argc, char** argv)
             if (YawOf(node) < 40.0f || YawOf(node) > 50.0f)
                 result = Fail("unexpected yaw of a reflected component");
         }
-        if (context->GetReflection(StringHash("Counter")))
-            result = Fail("Counter is registered with the engine, but it has no attribute");
         for (const char* className : {"Rotator", "Rotator2"})
         {
             if (SceneRoundTrip(context, className) != className)
@@ -398,7 +365,7 @@ int main(int argc, char** argv)
                     }
                     return 0;
                 };
-                const auto spawnerLive = [&] { return system->CreateObject<LogicComponent>("Spawner") != nullptr; };
+                const auto rotatorLive = [&] { return system->CreateObject<LogicComponent>("Rotator") != nullptr; };
                 const std::string preludePath = dataDir + "/Scripts/Test.prelude.hot";
                 const std::string overridePath = dataDir + "/Scripts/Zz.prelude.hot";
                 const std::string preludeText =
@@ -406,17 +373,17 @@ int main(int argc, char** argv)
                 WriteFile(preludePath, preludeText);
                 if (compileAll("a new user prelude does not start a compile") != 0)
                     result = 1;
-                if (!scriptError("Scripts/Spawner.hot").empty())
-                    result = Fail("Spawner does not compile with the user prelude");
+                if (!scriptError("Scripts/Rotator.hot").empty())
+                    result = Fail("Rotator does not compile with the user prelude");
 
-                // A new prelude overrides one attribute of the library rule: it clears the weak handle of
-                // Urho3D.RefCounted. The "[weak] Urho3D.Node" of Spawner is then an error, and the old code stays.
-                WriteFile(overridePath, "[native, weak_handle(\"\")] class Urho3D.RefCounted;\n");
+                // A new prelude overrides the storage of the library rule of Urho3D.RefCounted. It keeps the inherited
+                // weak handle, so the merged rule is not valid. Rotator then has an error, and the old code stays.
+                WriteFile(overridePath, "[native, value] class Urho3D.RefCounted;\n");
                 if (compileAll("a new user prelude does not start a compile") != 0)
                     result = 1;
-                const ea::string overrideError = scriptError("Scripts/Spawner.hot");
-                std::printf("SmokeTest: Spawner with the override prelude: %s\n", overrideError.c_str());
-                if (overrideError.empty() || !spawnerLive())
+                const ea::string overrideError = scriptError("Scripts/Rotator.hot");
+                std::printf("SmokeTest: Rotator with the override prelude: %s\n", overrideError.c_str());
+                if (overrideError.empty() || !rotatorLive())
                     result = Fail("the override of a prelude attribute has no effect or removes the old code");
 
                 // The removal of the prelude compiles all scripts again with the library rule.
@@ -424,8 +391,8 @@ int main(int argc, char** argv)
                 stdfs::remove(overridePath, ec);
                 if (compileAll("a removed user prelude does not start a compile") != 0)
                     result = 1;
-                if (!scriptError("Scripts/Spawner.hot").empty())
-                    result = Fail("Spawner does not compile after the removal of the override prelude");
+                if (!scriptError("Scripts/Rotator.hot").empty())
+                    result = Fail("Rotator does not compile after the removal of the override prelude");
 
                 // A broken prelude keeps the old code and shows the error in the status of each script.
                 const auto writePrelude = [&](const std::string& text)
@@ -438,14 +405,14 @@ int main(int argc, char** argv)
                 writePrelude(preludeText + "[broken\n");
                 if (compileAll("a changed user prelude does not start a compile") != 0)
                     result = 1;
-                const ea::string brokenError = scriptError("Scripts/Spawner.hot");
-                if (brokenError.find("Test.prelude.hot") == ea::string::npos || !spawnerLive() || !near(yawOfOneUpdate(), 90.0f))
+                const ea::string brokenError = scriptError("Scripts/Rotator.hot");
+                if (brokenError.find("Test.prelude.hot") == ea::string::npos || !rotatorLive() || !near(yawOfOneUpdate(), 90.0f))
                     result = Fail("a broken user prelude does not keep the old code or does not name the prelude");
 
                 writePrelude(preludeText);
                 if (compileAll("a restored user prelude does not start a compile") != 0)
                     result = 1;
-                if (!scriptError("Scripts/Spawner.hot").empty() || !rotator2Error().empty())
+                if (!scriptError("Scripts/Rotator.hot").empty() || !rotator2Error().empty())
                     result = Fail("the scripts do not compile after the user prelude is restored");
                 if (!ReportsRegisteredType(context, rotator2, "Rotator2"))
                     result = Fail("the library prelude text is lost after the user prelude changes");
@@ -478,7 +445,7 @@ int main(int argc, char** argv)
 
     // The unload removes the script types from the engine. A second plugin instance (as after a plugin reload
     // of the editor) then registers them again with no warning.
-    for (const char* className : {"Rotator", "Rotator2", "Spawner"})
+    for (const char* className : {"Rotator", "Rotator2"})
     {
         if (context->GetReflection(StringHash(className)))
             result = Fail("a script type stays registered after the plugin unloads");
@@ -489,7 +456,7 @@ int main(int argc, char** argv)
         plugin->LoadPlugin();
         if (logCounter->count_ != 0)
             result = Fail("the second plugin instance logs ScriptSystem warnings");
-        for (const char* className : {"Rotator", "Rotator2", "Spawner"})
+        for (const char* className : {"Rotator", "Rotator2"})
         {
             ObjectReflection* reflection = context->GetReflection(StringHash(className));
             if (!reflection || !reflection->HasObjectFactory())

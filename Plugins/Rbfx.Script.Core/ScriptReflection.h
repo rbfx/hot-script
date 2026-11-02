@@ -19,4 +19,10 @@
 #define RBFX_SCRIPT_REFLECTED_ATTRIBUTE "ReflectedObject"
 
 /// Put it after "class" in a .cpp script. It is the same as "[ReflectedObject]" in a .hot script.
-#define RBFX_SCRIPT_REFLECTED HOT_ATTRIBUTE(RBFX_SCRIPT_REFLECTED_ATTRIBUTE)
+/// It also tells Hot++ that URHO3D_OBJECT in the class body is for the shell. The shell then reports
+/// the script type, and the script has no slot for the four functions that the macro overrides.
+/// The file stays a normal C++ file: URHO3D_OBJECT stays in the class.
+#define RBFX_SCRIPT_REFLECTED \
+    HOT_ATTRIBUTE(RBFX_SCRIPT_REFLECTED_ATTRIBUTE) \
+    HOT_SHELL_MACRO("URHO3D_OBJECT") \
+    HOT_NO_SLOT("GetType GetTypeName GetTypeInfo IsInstanceOf")

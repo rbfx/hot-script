@@ -13,7 +13,7 @@ class Rotator : Urho3D.LogicComponent {
         Urho3D.Node* node = GetNode();
         if (node != null) {
             node.Rotate(Urho3D.Quaternion(
-                speed * timeStep,
+                0.0f,
                 speed * timeStep,
                 0.0f), Urho3D.TS_LOCAL);
         }

@@ -98,9 +98,6 @@ A script class without a native base uses `std::shared_ptr`.
 In such a class, `this` as a handle is not supported.
 Give the class a native base that derives from `RefCounted` instead.
 
-`Project/Data/Scripts/Spawner.hot` is the sample.
-The smoke test checks that its weak handle gives null after the node is removed.
-It also checks that the `eastl.vector` and the `std.vector` of Spawner hold the same values.
 
 ### Preludes: library defaults and user overrides
 
@@ -149,6 +146,10 @@ class RBFX_SCRIPT_REFLECTED Rotator2 : public Urho3D::LogicComponent { ... };
 ```
 
 The macro is the Hot++ macro `HOT_ATTRIBUTE("ReflectedObject")`, a clang annotation.
+`RBFX_SCRIPT_REFLECTED` also names `URHO3D_OBJECT` as a shell macro (`HOT_SHELL_MACRO`).
+A `.cpp` class keeps `URHO3D_OBJECT(Name, Base);` in its body, as in a normal C++ file.
+Hot++ copies the call into the shell and hides its members from the script.
+The script has no slot for `GetType`, `GetTypeName`, `GetTypeInfo` and `IsInstanceOf` (`HOT_NO_SLOT`).
 The two forms give the same result.
 
 - After each script load, the `ScriptSystem` registers each new class with this attribute.
@@ -183,7 +184,7 @@ Limits (TODO comments in `ScriptSystem::RegisterReflectedTypes`):
 - A removed class does not unregister the type.
 - Script fields are not engine attributes yet.
 
-`Rotator.hot`, `Spawner.hot` and `Rotator2.cpp` in `Project/Data/Scripts` are the samples.
+`Rotator.hot` and `Rotator2.cpp` in `Project/Data/Scripts` are the samples.
 The smoke test checks that the engine knows them and makes them by name.
 
 ### Hot reload

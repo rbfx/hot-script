@@ -98,16 +98,15 @@ public:
     }
 
     /// Create an object of a script class. Return null when the class is not live.
-    /// A class with the constructor "(Urho3D::Context*)" gets "context", or the context of the
-    /// system when "context" is null. Another class uses its default constructor.
+    /// The class needs the constructor "(Urho3D::Context*)". It gets "context". The context is not null.
     /// The pointer points to the native base of the class (the first base of the script class).
     /// The caller owns the object.
-    virtual void* CreateNative(const ea::string& className, Context* context = nullptr);
+    virtual void* CreateNative(const ea::string& className, Context* context);
     /// Create an object of a script class with the native base T, for example LogicComponent.
     /// T must be the first native base of the script class, or a base of it at offset zero.
     template <class T> SharedPtr<T> CreateObject(const ea::string& className)
     {
-        return SharedPtr<T>(static_cast<T*>(CreateNative(className)));
+        return SharedPtr<T>(static_cast<T*>(CreateNative(className, GetContext())));
     }
     /// Create an object of a script class with the script constructor whose parameter types are
     /// the types of "args", without references and top-level const (hot::ClassEntry::construct).
