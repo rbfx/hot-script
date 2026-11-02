@@ -4,6 +4,7 @@
 // The end-to-end test of the game plugin. It opens the plugin library as the engine does
 // (dlopen without RTLD_GLOBAL), loads the scripts of <data-dir>/Scripts, creates the script
 // components, updates them, changes a script, reloads it and updates again.
+// Then it unloads the plugin, loads a second plugin instance and checks the engine types again.
 //   Rbfx.Script.SmokeTest <plugin-library> <data-dir>
 // The test input is Project/Data, the data of the editor demo. Give a writable copy of it: the test changes
 // Scripts/Rotator2.cpp and restores it.
@@ -11,11 +12,14 @@
 #include <Rbfx.Script.Core/ScriptSystem.h>
 
 #include <Urho3D/Core/Context.h>
+#include <Urho3D/IO/IOEvents.h>
 #include <Urho3D/Core/ObjectCategory.h>
 #include <Urho3D/Engine/Engine.h>
 #include <Urho3D/Engine/EngineDefs.h>
 #include <Urho3D/IO/FileSystem.h>
 #include <Urho3D/IO/Log.h>
+#include <Urho3D/IO/MemoryBuffer.h>
+#include <Urho3D/IO/VectorBuffer.h>
 #include <Urho3D/Plugins/Plugin.h>
 #include <Urho3D/Scene/LogicComponent.h>
 #include <Urho3D/Scene/Node.h>
@@ -61,6 +65,28 @@ float YawOf(Node* node)
 {
     return node->GetRotation().YawAngle();
 }
+
+/// Count the log warnings and errors of the ScriptSystem.
+class LogCounter : public Object
+{
+    URHO3D_OBJECT(LogCounter, Object);
+
+public:
+    explicit LogCounter(Context* context)
+        : Object(context)
+    {
+        SubscribeToEvent(E_LOGMESSAGE,
+            [this](VariantMap& eventData)
+            {
+                const int level = eventData[LogMessage::P_LEVEL].GetInt();
+                const ea::string& message = eventData[LogMessage::P_MESSAGE].GetString();
+                if (level >= LOG_WARNING && message.contains("ScriptSystem"))
+                    ++count_;
+            });
+    }
+
+    unsigned count_{};
+};
 
 } // namespace
 
@@ -217,6 +243,55 @@ int main(int argc, char** argv)
                 result = Fail("the reload did not change the code");
         }
 
+        scene.Reset();
+        plugin->UnloadPlugin();
+        plugin.Reset();
+    }
+
+    // The unload removes the script types from the engine. A second plugin instance (as after a plugin reload
+    // of the editor) then registers them again with no warning.
+    for (const char* className : {"Rotator", "Rotator2", "Spawner"})
+    {
+        if (context->GetReflection(StringHash(className)))
+            result = Fail("a script type stays registered after the plugin unloads");
+    }
+    {
+        auto logCounter = MakeShared<LogCounter>(context);
+        SharedPtr<Plugin> plugin(pluginMain(context));
+        plugin->LoadPlugin();
+        if (logCounter->count_ != 0)
+            result = Fail("the second plugin instance logs ScriptSystem warnings");
+        for (const char* className : {"Rotator", "Rotator2", "Spawner"})
+        {
+            ObjectReflection* reflection = context->GetReflection(StringHash(className));
+            if (!reflection || !reflection->HasObjectFactory())
+                result = Fail("the second plugin instance does not register a script type");
+        }
+
+        // Save a scene with a Rotator component and load it into a new scene.
+        auto scene = MakeShared<Scene>(context);
+        scene->CreateChild("Saved")->CreateComponent(StringHash("Rotator"));
+        VectorBuffer saved;
+        if (!scene->SaveXML(saved))
+            result = Fail("Scene::SaveXML failed");
+        auto loadedScene = MakeShared<Scene>(context);
+        MemoryBuffer savedData(saved.GetBuffer());
+        if (!loadedScene->LoadXML(savedData))
+            result = Fail("Scene::LoadXML failed");
+        Node* loadedNode = loadedScene->GetChild("Saved");
+        Component* loaded = loadedNode && !loadedNode->GetComponents().empty() ? loadedNode->GetComponents()[0].Get() : nullptr;
+        std::printf("SmokeTest: the loaded scene has the component '%s'\n", loaded ? loaded->GetTypeName().c_str() : "(none)");
+        // Known gap: the shell of a script object reports the type of its native base. So the scene saves
+        // "LogicComponent", and the load makes an UnknownComponent. The check fails when the gap is closed.
+        // Then make this check strict.
+        if (!loaded)
+            result = Fail("the saved component does not load");
+        else if (loaded->GetTypeName() == "Rotator")
+            result = Fail("the type gap is closed: make the scene check strict");
+        else
+            std::printf("SmokeTest: KNOWN GAP: the scene saves the native base type of a script component\n");
+
+        loadedScene.Reset();
         scene.Reset();
         plugin->UnloadPlugin();
         plugin.Reset();

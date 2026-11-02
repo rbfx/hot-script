@@ -104,6 +104,8 @@ ScriptSystem::ScriptSystem(Context* context, std::shared_ptr<IScriptSource> sour
 
 ScriptSystem::~ScriptSystem()
 {
+    // The engine factory of a script type points to this subsystem and maybe into a library that unloads.
+    UnregisterReflectedTypes();
     // The loader unloads the script code. It goes before the backend (see the header).
     loader_.reset();
     backend_.reset();
@@ -249,7 +251,6 @@ bool ScriptSystem::CompileAndApply(const ea::string& name)
 
 void ScriptSystem::RegisterReflectedTypes()
 {
-    // TODO: Unregister all script types from the engine when the plugin unloads.
     // TODO: Register new classes on reload also when Update commits a pending reload.
     // TODO: Unregister removed classes. The engine can still hold objects of them.
     // TODO: Register the engine attributes of new fields on reload.
@@ -291,6 +292,25 @@ void ScriptSystem::RegisterReflectedTypes()
     }
 }
 
+void ScriptSystem::UnregisterReflectedTypes()
+{
+    // RemoveReflection also removes the type from its category list.
+    if (!context_)
+    {
+        reflectedTypes_.clear();
+        return;
+    }
+    for (const StringHash type : reflectedTypes_)
+    {
+        if (ObjectReflection* reflection = context_->GetReflection(type))
+        {
+            URHO3D_LOGINFO("ScriptSystem: unregistered '{}' from the engine", reflection->GetTypeName());
+            context_->RemoveReflection(type);
+        }
+    }
+    reflectedTypes_.clear();
+}
+
 bool ScriptSystem::LoadScript(const ea::string& name)
 {
     if (!IsScriptFileName(name))
@@ -315,8 +335,11 @@ unsigned ScriptSystem::LoadAllScripts()
 {
     if (!source_)
         return 0;
+    // Load in the order of the names. A file system scan has no fixed order.
+    ea::vector<ea::string> names = source_->ListScripts();
+    ea::sort(names.begin(), names.end());
     unsigned count = 0;
-    for (const ea::string& name : source_->ListScripts())
+    for (const ea::string& name : names)
     {
         if (LoadScript(name))
             ++count;

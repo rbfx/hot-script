@@ -117,6 +117,10 @@ public:
     virtual ea::vector<ScriptStatus> GetScriptStatus() const;
     /// Return the active Hot++ generation. Zero before the first load.
     virtual unsigned GetActiveGeneration() const;
+    /// Remove each script type that this subsystem registered with the engine.
+    /// The destructor calls it. Thus a new subsystem, for example of a reloaded plugin, can register the types again.
+    /// The engine must not hold objects of these types.
+    virtual void UnregisterReflectedTypes();
 
     /// Return the ScriptSystem of the context. Make and register one with the source when the
     /// context has none. "created" is true when this call made the subsystem: the caller then

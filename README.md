@@ -97,13 +97,17 @@ The two forms give the same result.
 - The engine attributes of the native base are copied to the script type.
 - A component type gets the category `Component/User`. The editor lists it in the "User" group of its component menus.
 - The primary native base must be an engine type, for example `LogicComponent`.
+- The script system loads the scripts in name order. It registers the types before the plugin `Load` returns.
+  Thus the types exist before a scene loads, also after a plugin reload of the editor.
+- The destructor of the `ScriptSystem` unregisters its types (`UnregisterReflectedTypes`).
+  So a plugin unload removes the types, and a new plugin instance registers them again.
 - Here, "attribute" is a Hot++ tag. An "engine attribute" is a reflected rbfx property.
 
 Limits (TODO comments in `ScriptSystem::RegisterReflectedTypes`):
 
 - `GetType`, `GetTypeName` and `GetTypeInfo` give the native base, not the script type.
-  So a scene save writes the base type, and a scene load does not make the script class.
-- A plugin unload and a removed class do not unregister the type.
+  So a scene save writes the base type, and a scene load makes an `UnknownComponent`.
+- A removed class does not unregister the type.
 - Script fields are not engine attributes yet.
 
 `Rotator.hot`, `Spawner.hot` and `Rotator2.cpp` in `Project/Data/Scripts` are the samples.
