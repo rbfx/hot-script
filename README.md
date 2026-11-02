@@ -9,6 +9,8 @@ Script support for rbfx. It uses Hot++ for hot reload.
 - `Plugins/Rbfx.Script/`: game plugin (`Plugin.Rbfx.Script`).
 - `Plugins/Rbfx.Script.Editor/`: editor plugin (`Plugin.Rbfx.Script.Editor`, a static library for the custom editor).
 - `Source/Editor/`: custom editor `RbfxScriptEditor`.
+- `Source/Application/`: demo main plugin `RbfxScript.Main`. It is not a part of the scripting system.
+- `Source/Launcher/`: demo player `RbfxScriptPlayer`.
 - `Tests/ScriptSmokeTest/`: end-to-end test of the game plugin.
 - `Project/`: editor demo project. `Project/Data/Scripts/` has the sample scripts.
 
@@ -147,6 +149,26 @@ The "Scripts" tab loads the scripts of `Project/Data/Scripts/`.
 `Rotator.hot` and `Rotator2.cpp` are `LogicComponent` classes that turn their node.
 `Project/Project.json` also loads the game plugin `Plugin.Rbfx.Script`, for the play mode.
 The game plugin then uses the `ScriptSystem` of the tab. So the editor has one script system.
+
+### Play mode
+
+The play mode needs a main plugin. The main plugin loads the scene and makes the viewport.
+`Plugin.Rbfx.Script` is generic, so it is not a main plugin.
+The demo main plugin is `RbfxScript.Main` (`Source/Application/`).
+It loads the scene of the `SceneName` engine parameter and uses the first camera.
+If the scene has no camera, it creates a camera.
+It moves the camera to the editor camera position and rotation.
+
+`Project/Project.json` loads `Plugin.Rbfx.Script` first and `RbfxScript.Main` second.
+Thus the script types exist when the scene loads.
+The scene also stops before the scripts stop.
+
+The player runs the same plugins without the editor:
+
+    cmake --build cmake-build --target RbfxScriptPlayer
+    cd cmake-build/bin && ./RbfxScriptPlayer --scene Scenes/Sample.scene
+
+The player needs `ResourceRoot.ini` in its directory or in a parent directory.
 
 ### Smoke test
 

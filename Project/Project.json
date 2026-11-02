@@ -1,7 +1,8 @@
 {
 	"PluginManager": {
 		"LoadedPlugins": [
-			"Plugin.Rbfx.Script"
+			"Plugin.Rbfx.Script",
+			"RbfxScript.Main"
 		]
 	}
 }

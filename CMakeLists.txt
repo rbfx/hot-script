@@ -95,6 +95,14 @@ if(EXISTS "${CMAKE_CURRENT_SOURCE_DIR}/Plugins/Rbfx.Script.Editor/CMakeLists.txt
     add_subdirectory(Plugins/Rbfx.Script.Editor)
 endif()
 
+# Main plugin of the demo project and its player.
+if(EXISTS "${CMAKE_CURRENT_SOURCE_DIR}/Source/Application/CMakeLists.txt")
+    add_subdirectory(Source/Application)
+endif()
+if(EXISTS "${CMAKE_CURRENT_SOURCE_DIR}/Source/Launcher/CMakeLists.txt")
+    add_subdirectory(Source/Launcher)
+endif()
+
 # Custom editor linked with the plugins.
 if(EXISTS "${CMAKE_CURRENT_SOURCE_DIR}/Source/Editor/CMakeLists.txt")
     add_subdirectory(Source/Editor)

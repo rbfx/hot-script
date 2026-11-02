@@ -8,9 +8,11 @@ if(NOT URHO3D_WIN32_CONSOLE)
 endif()
 add_executable(RbfxScriptEditor ${RBFX_SCRIPT_EDITOR_TYPE} Editor.cpp)
 target_link_libraries(RbfxScriptEditor PRIVATE Plugin.Rbfx.Script.Editor)
-# The game plugin is a shared library that the project loads (Project/Project.json).
-# It is not linked. The build makes it before the editor, so the editor can find it.
+# The game plugin and the demo main plugin are shared libraries that the project loads (Project/Project.json).
+# They are not linked. The build makes them before the editor, so the editor can find them.
 target_link_plugins(RbfxScriptEditor "")
-if(TARGET Plugin.Rbfx.Script)
-    add_dependencies(RbfxScriptEditor Plugin.Rbfx.Script)
-endif()
+foreach(plugin Plugin.Rbfx.Script RbfxScript.Main)
+    if(TARGET ${plugin})
+        add_dependencies(RbfxScriptEditor ${plugin})
+    endif()
+endforeach()
