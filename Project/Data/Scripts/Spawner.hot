@@ -1,0 +1,39 @@
+// Test input of the smoke test. Spawner uses the rbfx prelude:
+// - "Urho3D.Node" is a Urho3D::SharedPtr<Urho3D::Node> handle, because Node derives from RefCounted.
+// - "[weak] Urho3D.Node" is a Urho3D::WeakPtr<Urho3D::Node>. A read gives null when the node is gone.
+// - "std.vector<int>" is an eastl::vector<int>.
+// - Counter has no native base, so an eastl::shared_ptr<Counter> holds it.
+using "Urho3D/Core/Context.h";
+using "Urho3D/Scene/LogicComponent.h";
+using "Urho3D/Scene/Node.h";
+
+class Counter {
+    int count = 0;
+}
+
+class Spawner : Urho3D.LogicComponent {
+    Urho3D.Node child = null;
+    [weak]
+    Urho3D.Node watched = null;
+    std.vector<int> frames = std.vector<int>();
+    Counter counter = new Counter();
+
+    Spawner() : base(Urho3D.Context.GetInstance()) {
+    }
+
+    override void Update(float timeStep) {
+        frames.push_back(1);
+        counter.count = counter.count + 1;
+        if (frames.size() == 1) {
+            // The script makes a node and gives it to the scene. The scene keeps it alive.
+            child = new Urho3D.Node(GetContext());
+            child.SetName("Spawned");
+            GetNode().AddChild(child);
+            watched = child;
+            child = null;
+        }
+        if (counter.count > 1 && watched == null) {
+            GetNode().SetName("SpawnerDone");
+        }
+    }
+}

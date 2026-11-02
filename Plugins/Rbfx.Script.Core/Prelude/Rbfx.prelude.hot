@@ -1,0 +1,11 @@
+// The prelude of the rbfx scripts. The script system gives it to the Hot++ translator before each
+// script. CMake embeds this file in the core library, so the game needs no file for it.
+
+// The standard library of rbfx is EASTL. "std.vector<int>" in a script is "eastl::vector<int>".
+// The engine also has the short name "ea" for the namespace "eastl".
+[std("eastl")];
+
+// Urho3D::SharedPtr holds an object that derives from Urho3D::RefCounted, and Urho3D::WeakPtr
+// is its weak handle ("[weak] T x"). The rule is also for a script class with such a native base,
+// for example a script class that derives from Urho3D::LogicComponent.
+[native, handle("Urho3D::SharedPtr<$T>"), weak_handle("Urho3D::WeakPtr<$T>")] class Urho3D.RefCounted;

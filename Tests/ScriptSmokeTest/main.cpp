@@ -124,6 +124,33 @@ int main(int argc, char** argv)
                 result = Fail("unexpected yaw");
         }
 
+        // The prelude: Spawner holds a node through Urho3D::SharedPtr and watches it through
+        // Urho3D::WeakPtr. The weak handle gives null after the node is removed.
+        if (!system->IsScriptLoaded("Scripts/Spawner.hot"))
+            result = Fail("Spawner.hot did not load");
+        else if (SharedPtr<LogicComponent> spawner = system->CreateObject<LogicComponent>("Spawner"))
+        {
+            Node* node = scene->CreateChild("Spawner");
+            node->AddComponent(spawner, 0);
+            spawner->Update(0.1f);
+            Node* spawned = node->GetChild("Spawned");
+            if (!spawned)
+                result = Fail("Spawner did not make the node");
+            else if (spawned->Refs() != 1)
+                result = Fail("the script keeps a strong reference to the node");
+            spawner->Update(0.1f);
+            if (node->GetName() != "Spawner")
+                result = Fail("the weak handle is null while the node is alive");
+            if (spawned)
+                spawned->Remove();
+            spawner->Update(0.1f);
+            std::printf("SmokeTest: Spawner node name after the remove = %s\n", node->GetName().c_str());
+            if (node->GetName() != "SpawnerDone")
+                result = Fail("the weak handle is not null after the node is removed");
+        }
+        else
+            result = Fail("CreateObject(Spawner) returned null");
+
         // Hot reload: change the speed of Rotator2 and reload. The live component keeps its node.
         Node* node2 = scene->GetChild("Rotator2");
         auto* rotator2 = node2 ? node2->GetComponent<LogicComponent>() : nullptr;

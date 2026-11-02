@@ -48,6 +48,26 @@ The default folder is `<project data folder>/Scripts`.
 Type a folder relative to the project folder and click "Apply Folder" to change it.
 The project `ui.ini` keeps the folder (entry `ScriptDir`).
 
+### The prelude
+
+`Plugins/Rbfx.Script.Core/Prelude/Rbfx.prelude.hot` configures the scripts.
+CMake embeds the file in the core library, so the game needs no file for it.
+The `ScriptSystem` gives it to the Hot++ backend (`hot::DefaultBackendOptions::preludes`).
+
+- `[std("eastl")]`: `std.vector<int>` in a script is `eastl::vector<int>`.
+- A class that derives from `Urho3D::RefCounted` is a `Urho3D::SharedPtr` handle.
+  `Urho3D.Node n = new Urho3D.Node(ctx);` holds a `Urho3D::SharedPtr<Urho3D::Node>`.
+- `[weak] Urho3D.Node w` is a `Urho3D::WeakPtr<Urho3D::Node>`. A read gives null when the object is gone.
+- A script class with a `RefCounted` native base, such as `Urho3D.LogicComponent`, uses the same handles.
+- A raw pointer `Urho3D.Node*` stays a raw pointer.
+
+A script class without a native base uses `eastl::shared_ptr`.
+In such a class, `this` as a handle is not supported.
+Give the class a native base that derives from `RefCounted` instead.
+
+`Project/Data/Scripts/Spawner.hot` is the sample.
+The smoke test checks that its weak handle gives null after the node is removed.
+
 ### Hot reload
 
 The subsystem polls the stamp of each loaded script every 500 ms, in the `E_ENDFRAME` handler.

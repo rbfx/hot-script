@@ -28,6 +28,7 @@ namespace
 
 // The engine include folders and definitions of the build (kEngineIncludeDirs, kEngineDefines).
 #include "Rbfx.Script.Core/ScriptBuildConfig.inl"
+#include "ScriptPrelude.inl"
 
 ea::string ToEaString(const std::string& text)
 {
@@ -121,6 +122,8 @@ bool ScriptSystem::EnsureBackend()
         options.extra_flags.emplace_back(flag.c_str());
     fileSystem_ = std::make_shared<ScriptSourceFileSystem>(source_);
     options.fs = fileSystem_;
+    // The embedded prelude: the EASTL namespace and the Urho3D::SharedPtr and Urho3D::WeakPtr handles.
+    options.preludes.emplace_back(kRbfxPreludeName, kRbfxPreludeText);
 
     try
     {
