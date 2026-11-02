@@ -76,19 +76,24 @@ The project `ui.ini` keeps the folder (entry `ScriptDir`).
 CMake embeds the file in the core library, so the game needs no file for it.
 The `ScriptSystem` gives it to the Hot++ backend (`hot::DefaultBackendOptions::preludes`).
 
-- `[std("eastl")]`: `std.vector<int>` in a script is `eastl::vector<int>`.
+- `[lib("eastl")]`: EASTL is a library namespace next to the C++ standard library.
+  `eastl.vector<int>` in a script is `eastl::vector<int>`, and `std.vector<int>` is `std::vector<int>`.
+  A script can use both in one class.
+  The EASTL containers get the bounds check of an index and the reload rules of the std containers.
+  An interpolated string `"${x}"` is a `std::string`. For an `eastl.string`, write `"${x}".c_str()`.
 - A class that derives from `Urho3D::RefCounted` is a `Urho3D::SharedPtr` handle.
   `Urho3D.Node n = new Urho3D.Node(ctx);` holds a `Urho3D::SharedPtr<Urho3D::Node>`.
 - `[weak] Urho3D.Node w` is a `Urho3D::WeakPtr<Urho3D::Node>`. A read gives null when the object is gone.
 - A script class with a `RefCounted` native base, such as `Urho3D.LogicComponent`, uses the same handles.
 - A raw pointer `Urho3D.Node*` stays a raw pointer.
 
-A script class without a native base uses `eastl::shared_ptr`.
+A script class without a native base uses `std::shared_ptr`.
 In such a class, `this` as a handle is not supported.
 Give the class a native base that derives from `RefCounted` instead.
 
 `Project/Data/Scripts/Spawner.hot` is the sample.
 The smoke test checks that its weak handle gives null after the node is removed.
+It also checks that the `eastl.vector` and the `std.vector` of Spawner hold the same values.
 
 ### Reflected script types
 

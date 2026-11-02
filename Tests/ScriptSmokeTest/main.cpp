@@ -179,7 +179,8 @@ int main(int argc, char** argv)
         }
 
         // The prelude: Spawner holds a node through Urho3D::SharedPtr and watches it through
-        // Urho3D::WeakPtr. The weak handle gives null after the node is removed.
+        // Urho3D::WeakPtr. The weak handle gives null after the node is removed. Spawner also uses
+        // an eastl::vector and a std::vector side by side.
         if (!system->IsScriptLoaded("Scripts/Spawner.hot"))
             result = Fail("Spawner.hot did not load");
         else if (SharedPtr<LogicComponent> spawner = system->CreateObject<LogicComponent>("Spawner"))
@@ -188,7 +189,9 @@ int main(int argc, char** argv)
             node->AddComponent(spawner, 0);
             spawner->Update(0.1f);
             Node* spawned = node->GetChild("Spawned");
-            if (!spawned)
+            if (node->GetChild("SpawnedBadVectors"))
+                result = Fail("the eastl and std vectors of Spawner hold different values");
+            else if (!spawned)
                 result = Fail("Spawner did not make the node");
             else if (spawned->Refs() != 1)
                 result = Fail("the script keeps a strong reference to the node");

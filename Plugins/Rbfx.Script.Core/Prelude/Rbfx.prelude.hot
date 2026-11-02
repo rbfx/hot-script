@@ -1,9 +1,10 @@
 // The prelude of the rbfx scripts. The script system gives it to the Hot++ translator before each
 // script. CMake embeds this file in the core library, so the game needs no file for it.
 
-// The standard library of rbfx is EASTL. "std.vector<int>" in a script is "eastl::vector<int>".
-// The engine also has the short name "ea" for the namespace "eastl".
-[std("eastl")];
+// The engine uses EASTL. A script uses it next to the C++ standard library: "eastl.vector<int>" is
+// eastl::vector<int>, and "std.vector<int>" is std::vector<int>. The attribute "lib" gives the EASTL
+// containers the bounds check of an index and the reload rules of the std containers.
+[lib("eastl")];
 
 // Urho3D::SharedPtr holds an object that derives from Urho3D::RefCounted, and Urho3D::WeakPtr
 // is its weak handle ("[weak] T x"). The rule is also for a script class with such a native base,
