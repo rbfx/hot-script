@@ -1,0 +1,7 @@
+{
+	"PluginManager": {
+		"LoadedPlugins": [
+			"Plugin.Rbfx.Script"
+		]
+	}
+}

@@ -39,6 +39,10 @@ namespace Urho3D
 ///
 /// Lifetime: release all script objects before the subsystem is destroyed. The destructor
 /// unloads the script code, and a live script object then has no code.
+///
+/// One runtime: the operations are virtual. A module that has only this header calls the code
+/// of the module that made the subsystem. Then the process has one Hot++ runtime state. Do not
+/// link Rbfx.Script.Core into a module only to call the subsystem of another module.
 class ScriptSystem : public Object
 {
     URHO3D_OBJECT(ScriptSystem, Object);
@@ -50,18 +54,18 @@ public:
 
     /// Compile a script and make its classes live. Return false on an error.
     /// A script that is loaded already is compiled again.
-    bool LoadScript(const ea::string& name);
+    virtual bool LoadScript(const ea::string& name);
     /// Compile a loaded script again and replace its code. The live objects keep their fields.
-    bool ReloadScript(const ea::string& name);
+    virtual bool ReloadScript(const ea::string& name);
     /// Load all scripts that the source lists. Return the number of scripts that load.
-    unsigned LoadAllScripts();
+    virtual unsigned LoadAllScripts();
     /// Return true when the script loaded successfully at least once.
     bool IsScriptLoaded(const ea::string& name) const { return loaded_.find(name) != loaded_.end(); }
 
     /// Create an object of a script class. Return null when the class is not live.
     /// The pointer points to the native base of the class (the first base of the script class).
     /// The caller owns the object.
-    void* CreateNative(const ea::string& className);
+    virtual void* CreateNative(const ea::string& className);
     /// Create an object of a script class with the native base T, for example LogicComponent.
     /// T must be the first native base of the script class, or a base of it at offset zero.
     template <class T> SharedPtr<T> CreateObject(const ea::string& className)
@@ -71,7 +75,7 @@ public:
 
     /// Poll the scripts, commit a pending reload and let Hot++ unload old code.
     /// The handler of E_ENDFRAME calls it.
-    void Update();
+    virtual void Update();
 
     /// Enable or disable the automatic reload of changed scripts. The default is enabled.
     void SetAutoReload(bool enable) { autoReload_ = enable; }
@@ -81,9 +85,9 @@ public:
     unsigned GetPollInterval() const { return pollInterval_; }
 
     /// Add an include folder for the script compile. Call it before the first load.
-    void AddIncludeDir(const ea::string& path);
+    virtual void AddIncludeDir(const ea::string& path);
     /// Add a compiler flag for the script compile. Call it before the first load.
-    void AddCompilerFlag(const ea::string& flag);
+    virtual void AddCompilerFlag(const ea::string& flag);
 
     /// Return the source of the scripts.
     IScriptSource* GetSource() const { return source_.get(); }

@@ -10,6 +10,7 @@ Script support for rbfx. It uses Hot++ for hot reload.
 - `Plugins/Rbfx.Script.Editor/`: editor plugin.
 - `Source/Editor/`: custom editor.
 - `Tests/ScriptSmokeTest/`: end-to-end test of the game plugin.
+- `Project/`: editor demo project. `Project/Data/Scripts/` has the sample scripts.
 
 ## Build
 
@@ -59,10 +60,25 @@ A changed header does not start a reload. Call `ReloadScript` for it.
   This lets the script modules find the Hot++ runtime in the plugin.
 - A GCC build compiles the scripts with the `clang++` of the system.
   The run-time compile needs `clang++` and its resource folder.
+- The process must have one copy of the Hot++ runtime state.
+  The operations of `ScriptSystem` are virtual, so a module with only the header calls the plugin code.
+  Do not link `Rbfx.Script.Core` into a module only to call the subsystem of the plugin.
+- Linux: the Hot++ runtime compiles with `-ftls-model=initial-exec`.
+  This marks the plugin `STATIC_TLS`. So glibc gives the plugin static TLS when the engine opens it.
+  The script modules read the call depth of Hot++ from static TLS.
+
+### Editor demo
+
+Open the `Project/` folder in the editor. `Project/Project.json` loads `Plugin.Rbfx.Script`.
+The plugin loads the scripts of `Project/Data/Scripts/`.
+`Rotator.hot` and `Rotator2.cpp` are `LogicComponent` classes that turn their node.
 
 ### Smoke test
 
     cmake -S . -B cmake-build -DRBFX_SCRIPT_BUILD_TESTS=ON
     cmake --build cmake-build --target Rbfx.Script.SmokeTest
-    cp -r Tests/ScriptSmokeTest/Data /tmp/script-data
+    cp -r Project/Data /tmp/script-data
     cmake-build/bin/Rbfx.Script.SmokeTest cmake-build/bin/libPlugin.Rbfx.Script.so /tmp/script-data
+
+Give an absolute data folder. The test changes `Scripts/Rotator2.cpp` in the copy and restores it.
+The test does not link `Rbfx.Script.Core`. It uses the `ScriptSystem` of the plugin.

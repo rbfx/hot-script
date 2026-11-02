@@ -65,6 +65,17 @@ if(BUILD_SHARED_LIBS)
 endif()
 add_subdirectory(hotpp)
 
+# A script module reads the call depth of Hot++ (a thread-local variable) with the initial-exec
+# model. The engine opens a plugin with dlopen. Then glibc gives the plugin static TLS only when
+# the plugin itself uses the initial-exec model. This flag marks the plugin STATIC_TLS.
+if(BUILD_SHARED_LIBS AND CMAKE_SYSTEM_NAME STREQUAL "Linux")
+    foreach(target hot_runtime_core hot_runtime)
+        if(TARGET ${target})
+            target_compile_options(${target} PRIVATE -ftls-model=initial-exec)
+        endif()
+    endforeach()
+endif()
+
 # Shared script core. The game plugin and the editor plugin link it.
 add_subdirectory(Plugins/Rbfx.Script.Core)
 

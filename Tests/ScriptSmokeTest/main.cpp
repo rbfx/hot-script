@@ -5,7 +5,7 @@
 // (dlopen without RTLD_GLOBAL), loads the scripts of <data-dir>/Scripts, creates the script
 // components, updates them, changes a script, reloads it and updates again.
 //   Rbfx.Script.SmokeTest <plugin-library> <data-dir>
-// The test input is Tests/ScriptSmokeTest/Data. Give a writable copy of it: the test changes
+// The test input is Project/Data, the data of the editor demo. Give a writable copy of it: the test changes
 // Scripts/Rotator2.cpp and restores it.
 
 #include <Rbfx.Script.Core/ScriptSystem.h>
